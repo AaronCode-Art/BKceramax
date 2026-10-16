@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -103,11 +105,12 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    stock_reservado AS "stockReservado", stock_disponible AS "stockDisponible",
                    stock_minimo AS "stockMinimo", stock_bajo AS "stockBajo"
             FROM vw_inventario
-            ORDER BY almacen_nombre, producto_nombre
+            ORDER BY almacen_nombre, producto_nombre, id_almacen, id_producto
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_inventario",
         nativeQuery = true
     )
-    List<InventarioProjection> listarInventario();
+    Page<InventarioProjection> listarInventario(Pageable pageable);
 
     @Query(
         value = """
@@ -118,11 +121,12 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    categoria_nombre AS "categoriaNombre", stock_fisico AS "stockFisico",
                    stock_reservado AS "stockReservado", stock_disponible AS "stockDisponible"
             FROM vw_stock_disponible
-            ORDER BY almacen_nombre, producto_nombre
+            ORDER BY almacen_nombre, producto_nombre, id_almacen, id_producto
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_stock_disponible",
         nativeQuery = true
     )
-    List<InventarioProjection> listarStockDisponible();
+    Page<InventarioProjection> listarStockDisponible(Pageable pageable);
 
     @Query(
         value = """
@@ -133,11 +137,12 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    id_pedido AS "idPedido", id_traslado AS "idTraslado", tipo, motivo,
                    cantidad, stock_resultante AS "stockResultante", observacion
             FROM vw_movimientos_inventario
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_movimientos_inventario",
         nativeQuery = true
     )
-    List<MovimientoInventarioProjection> listarMovimientos();
+    Page<MovimientoInventarioProjection> listarMovimientos(Pageable pageable);
 
     @Query(
         value = """
@@ -151,11 +156,12 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    pedido_codigo AS "pedidoCodigo", fecha_inicio AS "fechaInicio",
                    dias_transito AS "diasTransito"
             FROM vw_traslados_en_transito
-            ORDER BY fecha_inicio
+            ORDER BY fecha_inicio, id
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_traslados_en_transito",
         nativeQuery = true
     )
-    List<TrasladoInventarioProjection> listarTrasladosEnTransito();
+    Page<TrasladoInventarioProjection> listarTrasladosEnTransito(Pageable pageable);
 
     @Query(
         value = """
@@ -166,11 +172,12 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    cliente_nombre AS "clienteNombre", fecha_pedido AS "fechaPedido",
                    fecha_reserva AS "fechaReserva"
             FROM vw_reservas_activas
-            ORDER BY fecha_reserva
+            ORDER BY fecha_reserva, id_reserva
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_reservas_activas",
         nativeQuery = true
     )
-    List<ReservaInventarioProjection> listarReservasActivas();
+    Page<ReservaInventarioProjection> listarReservasActivas(Pageable pageable);
 
     @Query(
         value = """
@@ -181,9 +188,10 @@ public interface InventarioConsultaRepository extends Repository<Almacen, UUID> 
                    stock_anterior AS "stockAnterior", cantidad_ajustada AS "cantidadAjustada",
                    stock_nuevo AS "stockNuevo", motivo, observacion, created_at AS "createdAt"
             FROM ajuste_inventario_log
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             """,
+        countQuery = "SELECT COUNT(*) FROM ajuste_inventario_log",
         nativeQuery = true
     )
-    List<AjusteInventarioProjection> listarAjustes();
+    Page<AjusteInventarioProjection> listarAjustes(Pageable pageable);
 }

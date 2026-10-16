@@ -21,6 +21,12 @@ public interface PedidoRepository extends JpaRepository<Pedido, UUID> {
     Page<Pedido> findByCliente_IdOrderByCreatedAtDesc(UUID clienteId, Pageable pageable);
 
     @EntityGraph(attributePaths = "estado")
+    List<Pedido> findByVendedor_IdOrderByCreatedAtDesc(UUID vendedorId);
+
+    @EntityGraph(attributePaths = "estado")
+    Page<Pedido> findByVendedor_IdOrderByCreatedAtDesc(UUID vendedorId, Pageable pageable);
+
+    @EntityGraph(attributePaths = "estado")
     List<Pedido> findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
         UUID deliveryId,
         List<String> estados
@@ -41,6 +47,9 @@ public interface PedidoRepository extends JpaRepository<Pedido, UUID> {
 
     @EntityGraph(attributePaths = "estado")
     List<Pedido> findByEstado_CodigoInOrderByCreatedAtDesc(List<String> estados);
+
+    @EntityGraph(attributePaths = "estado")
+    Page<Pedido> findByEstado_CodigoInOrderByCreatedAtDesc(List<String> estados, Pageable pageable);
 
     @Query(
         value = """

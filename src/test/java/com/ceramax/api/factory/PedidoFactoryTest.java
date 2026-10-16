@@ -43,6 +43,7 @@ class PedidoFactoryTest {
             "Lima",
             "Miraflores",
             "Av. Ejemplo 456",
+            "987654321",
             null,
             null,
             null,
@@ -65,6 +66,7 @@ class PedidoFactoryTest {
         assertEquals("DELIVERY", pedido.getTipoEntrega());
         assertEquals("20123456789", pedido.getRuc());
         assertEquals("Cerámicas Ana S.A.C.", pedido.getRazonSocial());
+        assertEquals("987654321", pedido.getClienteTelefono());
         assertEquals(new BigDecimal("133.00"), pedido.getTotal());
     }
 
@@ -78,6 +80,7 @@ class PedidoFactoryTest {
             null,
             null,
             "Miraflores",
+            null,
             null,
             null,
             null,

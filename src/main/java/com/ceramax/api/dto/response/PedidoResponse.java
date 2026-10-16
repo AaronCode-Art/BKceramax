@@ -19,6 +19,8 @@ public record PedidoResponse(
     String tipoComprobante,
     String serie,
     String numeroComprobante,
+    String ruc,
+    String razonSocial,
     BigDecimal subtotal,
     BigDecimal descuentoCupon,
     BigDecimal costoEnvio,

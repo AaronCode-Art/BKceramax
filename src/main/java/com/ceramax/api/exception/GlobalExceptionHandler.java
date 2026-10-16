@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,6 +19,34 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleConflict(ConflictException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLockingFailure(
+        OptimisticLockingFailureException ex,
+        HttpServletRequest request
+    ) {
+        return build(
+            HttpStatus.CONFLICT,
+            "El registro fue modificado por otra operación. Recargue los datos e intente nuevamente.",
+            request
+        );
+    }
+
+    @ExceptionHandler(CacheUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleCacheUnavailable(
+        CacheUnavailableException ex,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ExternalServiceUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleExternalServiceUnavailable(
+        ExternalServiceUnavailableException ex,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

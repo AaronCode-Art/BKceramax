@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -51,6 +52,7 @@ public class GaleriaImagenService {
             .toList();
     }
 
+    @CacheEvict(value = "catalogo-galeria", key = "#productoId", beforeInvocation = true)
     public GaleriaImagenResponse crear(UUID productoId, GaleriaImagenRequest request) {
         Producto producto = productoRepository.findById(productoId)
             .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
@@ -71,6 +73,7 @@ public class GaleriaImagenService {
         return galeriaImagenMapper.toResponse(galeriaImagen);
     }
 
+    @CacheEvict(value = "catalogo-galeria", key = "#productoId", beforeInvocation = true)
     public GaleriaImagenResponse cargarArchivo(
         UUID productoId,
         MultipartFile archivo,
@@ -103,6 +106,7 @@ public class GaleriaImagenService {
         }
     }
 
+    @CacheEvict(value = "catalogo-galeria", key = "#productoId", beforeInvocation = true)
     public GaleriaImagenResponse actualizar(UUID productoId, UUID imagenId, GaleriaImagenRequest request) {
         GaleriaImagen galeriaImagen = galeriaImagenRepository.findById(imagenId)
             .orElseThrow(() -> new ResourceNotFoundException("Imagen no encontrada"));
@@ -118,6 +122,7 @@ public class GaleriaImagenService {
         return galeriaImagenMapper.toResponse(galeriaImagen);
     }
 
+    @CacheEvict(value = "catalogo-galeria", key = "#productoId", beforeInvocation = true)
     public GaleriaImagenResponse reemplazarArchivo(
         UUID productoId,
         UUID imagenId,
@@ -148,6 +153,7 @@ public class GaleriaImagenService {
         return galeriaImagenMapper.toResponse(imagen);
     }
 
+    @CacheEvict(value = "catalogo-galeria", key = "#productoId", beforeInvocation = true)
     public void eliminar(UUID productoId, UUID imagenId) {
         GaleriaImagen galeriaImagen = obtenerImagen(productoId, imagenId);
         cloudinaryStorageService.delete(galeriaImagen.getPublicId());

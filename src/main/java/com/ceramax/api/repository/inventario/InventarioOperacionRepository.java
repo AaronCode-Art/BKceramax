@@ -5,6 +5,9 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -184,21 +187,64 @@ public class InventarioOperacionRepository {
         );
     }
 
-    public List<SolicitudEntradaResponse> listarSolicitudesEntrada(UUID solicitanteId) {
+    public Page<SolicitudEntradaResponse> listarSolicitudesEntrada(UUID solicitanteId, Pageable pageable) {
+        String where = " WHERE tipo = 'ENTRADA'";
+        Object[] countParams;
+        if (solicitanteId != null) {
+            where += " AND id_usuario_solicitante = ?";
+            countParams = new Object[] { solicitanteId };
+        } else {
+            countParams = new Object[0];
+        }
         String sql = """
             SELECT id, codigo, tipo, estado, id_almacen, almacen_nombre, id_producto,
                    producto_codigo, producto_nombre, cantidad, stock_resultante_esperado,
                    motivo, observacion, usuario_solicitante_nombre, usuario_aprobador_nombre,
                    fecha_solicitud, fecha_respuesta, motivo_respuesta
             FROM solicitud_movimiento_inventario
-            WHERE tipo = 'ENTRADA'
-            """;
-        Object[] params = solicitanteId == null ? new Object[0] : new Object[] { solicitanteId };
-        if (solicitanteId != null) {
-            sql += " AND id_usuario_solicitante = ?";
-        }
-        sql += " ORDER BY fecha_solicitud DESC";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new SolicitudEntradaResponse(
+            """ + where + " ORDER BY fecha_solicitud DESC, id DESC LIMIT ? OFFSET ?";
+        Object[] params = appendPageParams(countParams, pageable);
+        List<SolicitudEntradaResponse> rows = jdbcTemplate.query(sql, this::mapSolicitudEntrada, params);
+        Long total = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM solicitud_movimiento_inventario" + where,
+            Long.class,
+            countParams
+        );
+        return new PageImpl<>(rows, pageable, total == null ? 0 : total);
+    }
+
+    public Page<SolicitudEntradaResponse> listarSolicitudesEntradaPendientes(Pageable pageable) {
+        String where = " WHERE tipo = 'ENTRADA' AND estado = 'PENDIENTE'";
+        String sql = """
+            SELECT id, codigo, tipo, estado, id_almacen, almacen_nombre, id_producto,
+                   producto_codigo, producto_nombre, cantidad, stock_resultante_esperado,
+                   motivo, observacion, usuario_solicitante_nombre, usuario_aprobador_nombre,
+                   fecha_solicitud, fecha_respuesta, motivo_respuesta
+            FROM solicitud_movimiento_inventario
+            """ + where + " ORDER BY fecha_solicitud DESC, id DESC LIMIT ? OFFSET ?";
+        List<SolicitudEntradaResponse> rows = jdbcTemplate.query(
+            sql,
+            this::mapSolicitudEntrada,
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        Long total = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM solicitud_movimiento_inventario" + where,
+            Long.class
+        );
+        return new PageImpl<>(rows, pageable, total == null ? 0 : total);
+    }
+
+    private Object[] appendPageParams(Object[] params, Pageable pageable) {
+        Object[] result = java.util.Arrays.copyOf(params, params.length + 2);
+        result[params.length] = pageable.getPageSize();
+        result[params.length + 1] = pageable.getOffset();
+        return result;
+    }
+
+    private SolicitudEntradaResponse mapSolicitudEntrada(java.sql.ResultSet rs, int rowNum)
+        throws java.sql.SQLException {
+        return new SolicitudEntradaResponse(
             rs.getObject("id", UUID.class),
             rs.getString("codigo"),
             rs.getString("tipo"),
@@ -217,40 +263,6 @@ public class InventarioOperacionRepository {
             rs.getObject("fecha_solicitud", java.time.OffsetDateTime.class),
             rs.getObject("fecha_respuesta", java.time.OffsetDateTime.class),
             rs.getString("motivo_respuesta")
-        ), params);
-    }
-
-    public List<SolicitudEntradaResponse> listarSolicitudesEntradaPendientes() {
-        return jdbcTemplate.query(
-            """
-            SELECT id, codigo, tipo, estado, id_almacen, almacen_nombre, id_producto,
-                   producto_codigo, producto_nombre, cantidad, stock_resultante_esperado,
-                   motivo, observacion, usuario_solicitante_nombre, usuario_aprobador_nombre,
-                   fecha_solicitud, fecha_respuesta, motivo_respuesta
-            FROM solicitud_movimiento_inventario
-            WHERE tipo = 'ENTRADA' AND estado = 'PENDIENTE'
-            ORDER BY fecha_solicitud DESC
-            """,
-            (rs, rowNum) -> new SolicitudEntradaResponse(
-                rs.getObject("id", UUID.class),
-                rs.getString("codigo"),
-                rs.getString("tipo"),
-                rs.getString("estado"),
-                rs.getObject("id_almacen", UUID.class),
-                rs.getString("almacen_nombre"),
-                rs.getObject("id_producto", UUID.class),
-                rs.getString("producto_codigo"),
-                rs.getString("producto_nombre"),
-                (Integer) rs.getObject("cantidad"),
-                (Integer) rs.getObject("stock_resultante_esperado"),
-                rs.getString("motivo"),
-                rs.getString("observacion"),
-                rs.getString("usuario_solicitante_nombre"),
-                rs.getString("usuario_aprobador_nombre"),
-                rs.getObject("fecha_solicitud", java.time.OffsetDateTime.class),
-                rs.getObject("fecha_respuesta", java.time.OffsetDateTime.class),
-                rs.getString("motivo_respuesta")
-            )
         );
     }
 

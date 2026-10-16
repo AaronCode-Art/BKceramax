@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse;
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.InventarioReporteResponse;
+import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.PagoResumenResponse;
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.ProductoMasVendidoResponse;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
@@ -30,9 +31,10 @@ class ReporteExportServiceTest {
         assertTrue(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII).startsWith("%PDF-"));
         try (var documento = Loader.loadPDF(pdf)) {
             String texto = new PDFTextStripper().getText(documento);
-            assertTrue(texto.contains("REPORTE CONSOLIDADO"));
-            assertTrue(texto.contains("No hay ventas aprobadas en el periodo."));
-            assertTrue(texto.contains("Inventario actual"));
+            assertTrue(texto.contains("REPORTE DE VENTAS E INVENTARIO"));
+            assertTrue(texto.contains("Sin registros"));
+            assertTrue(texto.contains("INVENTARIO ACTUAL"));
+            assertTrue(!texto.contains("No hay ventas aprobadas en el periodo."));
         }
     }
 
@@ -42,7 +44,15 @@ class ReporteExportServiceTest {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
             assertEquals("Ventas", workbook.getSheetAt(0).getSheetName());
-            assertEquals("Inventario actual", workbook.getSheetAt(1).getSheetName());
+            assertEquals("Pagos", workbook.getSheetAt(1).getSheetName());
+            assertEquals("Inventario actual", workbook.getSheetAt(2).getSheetName());
+            assertTrue(workbook.getSheet("Ventas").getCTWorksheet().getAutoFilter().getRef() != null);
+            assertTrue(workbook.getSheet("Pagos").getCTWorksheet().getAutoFilter().getRef() != null);
+            assertTrue(workbook.getSheet("Inventario actual").getCTWorksheet().getAutoFilter().getRef() != null);
+            assertEquals(
+                "YAPE",
+                workbook.getSheet("Pagos").getRow(1).getCell(0).getStringCellValue()
+            );
             assertEquals(
                 "Maceta",
                 workbook.getSheet("Ventas").getRow(12).getCell(1).getStringCellValue()
@@ -51,6 +61,46 @@ class ReporteExportServiceTest {
                 "Almacén principal",
                 workbook.getSheet("Inventario actual").getRow(1).getCell(0).getStringCellValue()
             );
+        }
+    }
+
+    @Test
+    void repiteEncabezadosDeTablaEnCadaPaginaDelPdf() throws Exception {
+        ReporteVentasInventarioResponse base = reporteConInventario();
+        List<InventarioReporteResponse> filas = new ArrayList<>();
+        for (int i = 0; i < 180; i++) {
+            filas.add(new InventarioReporteResponse(
+                UUID.randomUUID(),
+                "ALM-" + i,
+                "Almacen " + i,
+                UUID.randomUUID(),
+                "PRO-" + i,
+                "Producto " + i,
+                "Categoria",
+                10,
+                1,
+                9,
+                5,
+                false
+            ));
+        }
+        ReporteVentasInventarioResponse reporte = new ReporteVentasInventarioResponse(
+            base.desde(),
+            base.hasta(),
+            base.generadoEn(),
+            base.cantidadVentas(),
+            base.ventasWeb(),
+            base.ventasPresenciales(),
+            base.ingresosTotales(),
+            base.productosMasVendidos(),
+            base.resumenPagos(),
+            filas
+        );
+
+        try (var documento = Loader.loadPDF(exportService.generarPdf(reporte))) {
+            assertTrue(documento.getNumberOfPages() > 1);
+            String texto = new PDFTextStripper().getText(documento);
+            assertTrue(texto.split("INVENTARIO ACTUAL", -1).length > 2);
         }
     }
 
@@ -83,6 +133,7 @@ class ReporteExportServiceTest {
             reporte.ventasPresenciales(),
             reporte.ingresosTotales(),
             reporte.productosMasVendidos(),
+            reporte.resumenPagos(),
             List.of()
         );
 
@@ -107,6 +158,7 @@ class ReporteExportServiceTest {
             0L,
             BigDecimal.ZERO,
             List.of(),
+            List.of(),
             List.of()
         );
     }
@@ -127,6 +179,7 @@ class ReporteExportServiceTest {
                 2L,
                 new BigDecimal("25.50")
             )),
+            List.of(new PagoResumenResponse("YAPE", "APROBADO", 1L, new BigDecimal("25.50"))),
             List.of(new InventarioReporteResponse(
                 UUID.randomUUID(),
                 "ALM-0001",

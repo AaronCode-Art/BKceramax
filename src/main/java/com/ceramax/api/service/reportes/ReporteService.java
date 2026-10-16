@@ -2,11 +2,11 @@ package com.ceramax.api.service.reportes;
 
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse;
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.InventarioReporteResponse;
+import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.PagoResumenResponse;
 import com.ceramax.api.dto.response.ReporteVentasInventarioResponse.ProductoMasVendidoResponse;
 import com.ceramax.api.exception.BusinessException;
+import com.ceramax.api.mappers.reportes.ReporteMapper;
 import com.ceramax.api.repository.reportes.ReporteRepository;
-import com.ceramax.api.repository.reportes.ReporteRepository.InventarioActual;
-import com.ceramax.api.repository.reportes.ReporteRepository.ProductoMasVendido;
 import com.ceramax.api.repository.reportes.ReporteRepository.ResumenVentas;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -21,10 +21,16 @@ public class ReporteService {
 
     private final ReporteRepository reporteRepository;
     private final ReporteExportService exportService;
+    private final ReporteMapper reporteMapper;
 
-    public ReporteService(ReporteRepository reporteRepository, ReporteExportService exportService) {
+    public ReporteService(
+        ReporteRepository reporteRepository,
+        ReporteExportService exportService,
+        ReporteMapper reporteMapper
+    ) {
         this.reporteRepository = reporteRepository;
         this.exportService = exportService;
+        this.reporteMapper = reporteMapper;
     }
 
     @Transactional(readOnly = true)
@@ -36,7 +42,7 @@ public class ReporteService {
     public byte[] exportarExcel(LocalDate desde, LocalDate hasta) {
         ReporteVentasInventarioResponse reporte = generar(desde, hasta, false);
         Consumer<Consumer<InventarioReporteResponse>> inventario = escritor ->
-            reporteRepository.recorrerInventarioActual(item -> escritor.accept(mapear(item)));
+            reporteRepository.recorrerInventarioActual(item -> escritor.accept(reporteMapper.toInventario(item)));
         return exportService.generarExcel(reporte, inventario);
     }
 
@@ -48,10 +54,15 @@ public class ReporteService {
         List<ProductoMasVendidoResponse> productos = reporteRepository
             .listarProductosMasVendidos(inicioUtc, finUtc)
             .stream()
-            .map(this::mapear)
+            .map(reporteMapper::toProductoMasVendido)
+            .toList();
+        List<PagoResumenResponse> pagos = reporteRepository
+            .listarResumenPagos(inicioUtc, finUtc)
+            .stream()
+            .map(reporteMapper::toPagoResumen)
             .toList();
         List<InventarioReporteResponse> inventario = incluirInventario
-            ? reporteRepository.listarInventarioActual().stream().map(this::mapear).toList()
+            ? reporteRepository.listarInventarioActual().stream().map(reporteMapper::toInventario).toList()
             : List.of();
 
         return new ReporteVentasInventarioResponse(
@@ -63,6 +74,7 @@ public class ReporteService {
             resumen.ventasPresenciales(),
             resumen.ingresosTotales(),
             productos,
+            pagos,
             inventario
         );
     }
@@ -70,6 +82,10 @@ public class ReporteService {
     @Transactional(readOnly = true)
     public byte[] exportarPdf(LocalDate desde, LocalDate hasta) {
         return exportService.generarPdf(generar(desde, hasta));
+    }
+
+    public void validarRangoFechas(LocalDate desde, LocalDate hasta) {
+        validarRango(desde, hasta);
     }
 
     private void validarRango(LocalDate desde, LocalDate hasta) {
@@ -82,32 +98,5 @@ public class ReporteService {
         if (hasta.equals(LocalDate.MAX)) {
             throw new BusinessException("La fecha hasta está fuera del rango permitido");
         }
-    }
-
-    private ProductoMasVendidoResponse mapear(ProductoMasVendido producto) {
-        return new ProductoMasVendidoResponse(
-            producto.productoId(),
-            producto.productoCodigo(),
-            producto.productoNombre(),
-            producto.unidadesVendidas(),
-            producto.importeVendido()
-        );
-    }
-
-    private InventarioReporteResponse mapear(InventarioActual item) {
-        return new InventarioReporteResponse(
-            item.almacenId(),
-            item.almacenCodigo(),
-            item.almacenNombre(),
-            item.productoId(),
-            item.productoCodigo(),
-            item.productoNombre(),
-            item.categoriaNombre(),
-            item.stockFisico(),
-            item.stockReservado(),
-            item.stockDisponible(),
-            item.stockMinimo(),
-            item.stockBajo()
-        );
     }
 }

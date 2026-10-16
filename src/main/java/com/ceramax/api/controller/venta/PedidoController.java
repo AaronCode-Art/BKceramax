@@ -5,6 +5,7 @@ import com.ceramax.api.dto.request.CambiarEstadoPedidoRequest;
 import com.ceramax.api.dto.request.CotizarCheckoutWebRequest;
 import com.ceramax.api.dto.request.CrearPedidoWebRequest;
 import com.ceramax.api.dto.response.CheckoutCotizacionResponse;
+import com.ceramax.api.dto.response.ClienteVentaResponse;
 import com.ceramax.api.dto.request.VentaPresencialRequest;
 import com.ceramax.api.dto.response.PedidoPaginaResponse;
 import com.ceramax.api.dto.response.PedidoResponse;
@@ -19,8 +20,11 @@ import java.util.List;
 import java.util.UUID;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -80,10 +84,24 @@ public class PedidoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(pedidoService.registrarVentaPresencial(request));
     }
 
+    @GetMapping("/presencial/cliente")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
+    public ResponseEntity<ClienteVentaResponse> buscarClienteVenta(
+        @RequestParam @NotBlank @Pattern(regexp = "DNI|RUC|CE|PASAPORTE") String tipoDocumento,
+        @RequestParam @NotBlank @Pattern(regexp = "[A-Za-z0-9]{1,20}") String numeroDocumento
+    ) {
+        return ResponseEntity.ok(pedidoService.buscarClienteVenta(tipoDocumento, numeroDocumento));
+    }
+
     @GetMapping("/mios")
     @PreAuthorize("hasRole('CLIENTE')")
-    public ResponseEntity<List<PedidoResponse>> listarMisPedidos() {
-        return ResponseEntity.ok(pedidoService.listarMisPedidos());
+    public ResponseEntity<PedidoPaginaResponse> listarMisPedidos(
+        @RequestParam(defaultValue = "0") @Min(0) int pagina,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int tamano
+    ) {
+        return ResponseEntity.ok(pedidoService.listarPaginaVisible(
+            PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "createdAt"))
+        ));
     }
 
     @GetMapping("/mios/pagina")
@@ -103,14 +121,22 @@ public class PedidoController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA', 'VENDEDOR', 'DELIVERY')")
-    public ResponseEntity<List<PedidoResponse>> listarPedidos() {
-        return ResponseEntity.ok(pedidoService.listarPedidosVisibles());
+    public ResponseEntity<PedidoPaginaResponse> listarPedidos(
+        @RequestParam(defaultValue = "0") @Min(0) int pagina,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int tamano
+    ) {
+        return ResponseEntity.ok(pedidoService.listarPaginaVisible(
+            PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "createdAt"))
+        ));
     }
 
     @GetMapping("/delivery/historial")
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'DELIVERY')")
-    public ResponseEntity<List<PedidoResponse>> listarHistorialDelivery() {
-        return ResponseEntity.ok(pedidoService.listarHistorialDelivery());
+    public ResponseEntity<PedidoPaginaResponse> listarHistorialDelivery(
+        @RequestParam(defaultValue = "0") @Min(0) int pagina,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int tamano
+    ) {
+        return ResponseEntity.ok(pedidoService.listarPaginaHistorialDelivery(PageRequest.of(pagina, tamano)));
     }
 
     @GetMapping("/{pedidoId}/historial-estados")
@@ -121,8 +147,11 @@ public class PedidoController {
 
     @GetMapping("/logistica")
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA')")
-    public ResponseEntity<List<PedidoResponse>> listarBandejaLogistica() {
-        return ResponseEntity.ok(pedidoService.listarBandejaLogistica());
+    public ResponseEntity<PedidoPaginaResponse> listarBandejaLogistica(
+        @RequestParam(defaultValue = "0") @Min(0) int pagina,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int tamano
+    ) {
+        return ResponseEntity.ok(pedidoService.listarPaginaBandejaLogistica(PageRequest.of(pagina, tamano)));
     }
 
     @GetMapping("/deliveries")

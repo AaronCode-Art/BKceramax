@@ -15,6 +15,7 @@ public record ReporteVentasInventarioResponse(
     Long ventasPresenciales,
     BigDecimal ingresosTotales,
     List<ProductoMasVendidoResponse> productosMasVendidos,
+    List<PagoResumenResponse> resumenPagos,
     List<InventarioReporteResponse> inventarioActual
 ) {
     public record ProductoMasVendidoResponse(
@@ -23,6 +24,13 @@ public record ReporteVentasInventarioResponse(
         String nombre,
         Long unidadesVendidas,
         BigDecimal importeVendido
+    ) {}
+
+    public record PagoResumenResponse(
+        String metodoPago,
+        String estado,
+        Long cantidadPagos,
+        BigDecimal montoTotal
     ) {}
 
     public record InventarioReporteResponse(

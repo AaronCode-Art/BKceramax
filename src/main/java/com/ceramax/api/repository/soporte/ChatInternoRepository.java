@@ -1,18 +1,23 @@
 package com.ceramax.api.repository.soporte;
 
 import com.ceramax.api.model.soporte.ChatInterno;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ChatInternoRepository extends JpaRepository<ChatInterno, UUID> {
-
     @Query("""
-        select c from ChatInterno c
-        where c.idUsuarioCreador = :usuarioId or c.idUsuarioDestino = :usuarioId
-        order by c.updatedAt desc
+        select chat
+        from ChatInterno chat
+        where exists (
+            select miembro.id
+            from ChatInternoMiembro miembro
+            where miembro.idChat = chat.id and miembro.idUsuario = :usuarioId
+        )
+        order by chat.updatedAt desc, chat.id desc
         """)
-    List<ChatInterno> findVisibleForUser(@Param("usuarioId") UUID usuarioId);
+    Page<ChatInterno> findVisibleToMember(@Param("usuarioId") UUID usuarioId, Pageable pageable);
 }

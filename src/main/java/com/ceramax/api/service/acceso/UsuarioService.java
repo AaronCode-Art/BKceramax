@@ -16,6 +16,8 @@ import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +51,10 @@ public class UsuarioService {
 
     public List<UsuarioResponse> listar() {
         return usuarioRepository.findAll().stream().map(usuarioMapper::toResponse).toList();
+    }
+
+    public Page<UsuarioResponse> listarPagina(Pageable pageable) {
+        return usuarioRepository.findAll(pageable).map(usuarioMapper::toResponse);
     }
 
     public UsuarioResponse obtenerPorId(UUID id) {

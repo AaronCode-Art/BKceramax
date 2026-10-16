@@ -1,9 +1,10 @@
 package com.ceramax.api.repository.catalogo;
 
 import com.ceramax.api.model.catalogo.Producto;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -23,11 +24,12 @@ public interface CatalogoPublicoRepository extends Repository<Producto, UUID> {
                 descuento_porcentaje AS "descuentoPorcentaje",
                 stock_disponible AS "stockDisponible"
             FROM vw_catalogo
-            ORDER BY producto_nombre
+            ORDER BY producto_nombre, id_producto
             """,
+        countQuery = "SELECT COUNT(*) FROM vw_catalogo",
         nativeQuery = true
     )
-    List<CatalogoPublicoProjection> listar();
+    Page<CatalogoPublicoProjection> listar(Pageable pageable);
 
     @Query(
         value = """

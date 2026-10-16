@@ -15,8 +15,13 @@ import com.ceramax.api.dto.response.TrasladoCreadoResponse;
 import com.ceramax.api.dto.response.TrasladoInventarioResponse;
 import com.ceramax.api.service.inventario.InventarioService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,8 +32,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/inventario")
 public class InventarioController {
 
@@ -40,14 +47,20 @@ public class InventarioController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA')")
-    public ResponseEntity<List<InventarioResponse>> listar() {
-        return ResponseEntity.ok(inventarioService.listarInventario());
+    public ResponseEntity<Page<InventarioResponse>> listar(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarInventario(pageable(page, size)));
     }
 
     @GetMapping("/stock-disponible")
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA')")
-    public ResponseEntity<List<StockDisponibleResponse>> listarStockDisponible() {
-        return ResponseEntity.ok(inventarioService.listarStockDisponible());
+    public ResponseEntity<Page<StockDisponibleResponse>> listarStockDisponible(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarStockDisponible(pageable(page, size)));
     }
 
     @GetMapping("/almacenes/{almacenId}/productos/{productoId}/stock-disponible")
@@ -60,25 +73,37 @@ public class InventarioController {
     }
 
     @GetMapping("/movimientos")
-    public ResponseEntity<List<MovimientoInventarioResponse>> listarMovimientos() {
-        return ResponseEntity.ok(inventarioService.listarMovimientos());
+    public ResponseEntity<Page<MovimientoInventarioResponse>> listarMovimientos(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarMovimientos(pageable(page, size)));
     }
 
     @GetMapping("/traslados/en-transito")
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA')")
-    public ResponseEntity<List<TrasladoInventarioResponse>> listarTrasladosEnTransito() {
-        return ResponseEntity.ok(inventarioService.listarTrasladosEnTransito());
+    public ResponseEntity<Page<TrasladoInventarioResponse>> listarTrasladosEnTransito(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarTrasladosEnTransito(pageable(page, size)));
     }
 
     @GetMapping("/reservas-activas")
-    public ResponseEntity<List<ReservaInventarioResponse>> listarReservasActivas() {
-        return ResponseEntity.ok(inventarioService.listarReservasActivas());
+    public ResponseEntity<Page<ReservaInventarioResponse>> listarReservasActivas(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarReservasActivas(pageable(page, size)));
     }
 
     @GetMapping("/ajustes")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<AjusteInventarioResponse>> listarAjustes() {
-        return ResponseEntity.ok(inventarioService.listarAjustes());
+    public ResponseEntity<Page<AjusteInventarioResponse>> listarAjustes(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarAjustes(pageable(page, size)));
     }
 
     @PostMapping("/entradas")
@@ -91,8 +116,11 @@ public class InventarioController {
 
     @GetMapping("/solicitudes-entradas")
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA', 'LOGISTICA')")
-    public ResponseEntity<List<com.ceramax.api.dto.response.SolicitudEntradaResponse>> listarSolicitudesEntrada() {
-        return ResponseEntity.ok(inventarioService.listarSolicitudesEntrada());
+    public ResponseEntity<Page<com.ceramax.api.dto.response.SolicitudEntradaResponse>> listarSolicitudesEntrada(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        return ResponseEntity.ok(inventarioService.listarSolicitudesEntrada(pageable(page, size)));
     }
 
     @PostMapping("/solicitudes-entradas/{id}/aprobar")
@@ -105,6 +133,10 @@ public class InventarioController {
     @PreAuthorize("hasAnyRole('ADMIN', 'JEFE_LOGISTICA')")
     public ResponseEntity<OperacionInventarioResponse> rechazarSolicitudEntrada(@PathVariable UUID id, @RequestParam(required = false) String motivo) {
         return ResponseEntity.ok(inventarioService.rechazarSolicitudEntrada(id, motivo == null || motivo.isBlank() ? "Rechazada por el usuario" : motivo));
+    }
+
+    private Pageable pageable(int page, int size) {
+        return PageRequest.of(page, size);
     }
 
     @PostMapping("/ajustes")

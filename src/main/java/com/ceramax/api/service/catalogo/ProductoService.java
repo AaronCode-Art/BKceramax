@@ -7,12 +7,17 @@ import com.ceramax.api.exception.ResourceNotFoundException;
 import com.ceramax.api.mappers.catalogo.ProductoMapper;
 import com.ceramax.api.model.catalogo.Categoria;
 import com.ceramax.api.model.catalogo.Producto;
+import com.ceramax.api.observer.event.ProductoActualizadoEvent;
 import com.ceramax.api.repository.catalogo.CategoriaRepository;
 import com.ceramax.api.repository.catalogo.ProductoRepository;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,22 +29,30 @@ public class ProductoService {
     private final CategoriaRepository categoriaRepository;
     private final ProductoMapper productoMapper;
     private final EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProductoService(
         ProductoRepository productoRepository,
         CategoriaRepository categoriaRepository,
         ProductoMapper productoMapper,
-        EntityManager entityManager
+        EntityManager entityManager,
+        ApplicationEventPublisher eventPublisher
     ) {
         this.productoRepository = productoRepository;
         this.categoriaRepository = categoriaRepository;
         this.productoMapper = productoMapper;
         this.entityManager = entityManager;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
     public List<ProductoResponse> listar() {
         return productoRepository.findAll().stream().map(productoMapper::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductoResponse> listarPagina(Pageable pageable) {
+        return productoRepository.findAll(pageable).map(productoMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -49,6 +62,7 @@ public class ProductoService {
         return productoMapper.toResponse(producto);
     }
 
+    @CacheEvict(value = "catalogo-galeria", allEntries = true, beforeInvocation = true)
     public ProductoResponse crear(ProductoRequest request) {
         if (productoRepository.existsByCodigo(request.codigo())) {
             throw new ConflictException("El código del producto ya existe");
@@ -69,6 +83,7 @@ public class ProductoService {
         return productoMapper.toResponse(producto);
     }
 
+    @CacheEvict(value = "catalogo-galeria", allEntries = true, beforeInvocation = true)
     public ProductoResponse actualizar(UUID id, ProductoRequest request) {
         Producto producto = productoRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
@@ -83,9 +98,11 @@ public class ProductoService {
         producto.setCategoria(categoria);
         productoRepository.saveAndFlush(producto);
         entityManager.refresh(producto);
+        eventPublisher.publishEvent(new ProductoActualizadoEvent(producto.getId(), producto.getNombre(), null));
         return productoMapper.toResponse(producto);
     }
 
+    @CacheEvict(value = "catalogo-galeria", allEntries = true, beforeInvocation = true)
     public void desactivar(UUID id) {
         Producto producto = productoRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));

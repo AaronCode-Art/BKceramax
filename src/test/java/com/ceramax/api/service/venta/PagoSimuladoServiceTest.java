@@ -44,6 +44,8 @@ class PagoSimuladoServiceTest {
             "BOLETA",
             null,
             null,
+            null,
+            null,
             BigDecimal.TEN,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
@@ -66,6 +68,7 @@ class PagoSimuladoServiceTest {
         return new CrearPedidoWebRequest(
             "RECOJO_TIENDA",
             "BOLETA",
+            null,
             null,
             null,
             null,

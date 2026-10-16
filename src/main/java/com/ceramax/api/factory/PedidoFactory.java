@@ -34,9 +34,12 @@ public class PedidoFactory {
         }
         if (
             "DELIVERY".equals(request.tipoEntrega())
-                && (isBlank(request.envioDireccion()) || isBlank(request.envioDistrito()))
+                && (isBlank(request.envioDireccion())
+                    || isBlank(request.envioDistrito())
+                    || isBlank(request.envioTelefono())
+                    || !request.envioTelefono().matches("9[0-9]{8}"))
         ) {
-            throw new BusinessException("Para DELIVERY se requiere dirección y distrito");
+            throw new BusinessException("Para DELIVERY se requiere dirección, distrito y un teléfono válido");
         }
 
         ComprobanteDatos comprobante = comprobanteFactory.crear(
@@ -54,7 +57,9 @@ public class PedidoFactory {
         pedido.setClienteNumeroDocumento(cliente.getNumeroDocumento());
         pedido.setClienteNombre(cliente.getNombres() + " " + cliente.getApellidos());
         pedido.setClienteEmail(cliente.getEmail());
-        pedido.setClienteTelefono(cliente.getTelefono());
+        pedido.setClienteTelefono(
+            "DELIVERY".equals(request.tipoEntrega()) ? request.envioTelefono() : cliente.getTelefono()
+        );
         pedido.setEnvioDepartamento(request.envioDepartamento());
         pedido.setEnvioProvincia(request.envioProvincia());
         pedido.setEnvioDistrito(request.envioDistrito());

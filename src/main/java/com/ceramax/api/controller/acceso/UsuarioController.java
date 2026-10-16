@@ -5,8 +5,14 @@ import com.ceramax.api.dto.request.UsuarioUpdateRequest;
 import com.ceramax.api.dto.response.UsuarioResponse;
 import com.ceramax.api.service.acceso.UsuarioService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,9 +22,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 @RestController
+@Validated
 @RequestMapping("/api/v1")
 @PreAuthorize("hasRole('ADMIN')")
 public class UsuarioController {
@@ -30,8 +39,16 @@ public class UsuarioController {
     }
 
     @GetMapping("/usuarios")
-    public ResponseEntity<List<UsuarioResponse>> listar() {
-        return ResponseEntity.ok(usuarioService.listar());
+    public ResponseEntity<Page<UsuarioResponse>> listar(
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+    ) {
+        Pageable pageable = PageRequest.of(
+            page,
+            size,
+            Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"))
+        );
+        return ResponseEntity.ok(usuarioService.listarPagina(pageable));
     }
 
     @GetMapping("/usuarios/{id}")

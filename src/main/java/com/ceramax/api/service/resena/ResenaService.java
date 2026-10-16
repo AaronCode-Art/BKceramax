@@ -10,6 +10,7 @@ import com.ceramax.api.exception.BusinessException;
 import com.ceramax.api.exception.ConflictException;
 import com.ceramax.api.exception.ForbiddenException;
 import com.ceramax.api.exception.ResourceNotFoundException;
+import com.ceramax.api.mappers.resena.ResenaMapper;
 import com.ceramax.api.model.acceso.Cliente;
 import com.ceramax.api.model.catalogo.Producto;
 import com.ceramax.api.model.resena.Resena;
@@ -21,6 +22,7 @@ import com.ceramax.api.repository.resena.ResenaPublicaProjection;
 import com.ceramax.api.repository.resena.ResenaRepository;
 import com.ceramax.api.repository.resena.ResumenResenasProjection;
 import com.ceramax.api.repository.venta.PedidoRepository;
+import com.ceramax.api.service.catalogo.CloudinaryStorageService;
 import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -30,15 +32,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class ResenaService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResenaService.class);
+    private static final int MAX_IMAGES_PER_REVIEW = 5;
 
     private final ResenaRepository resenaRepository;
     private final ResenaImagenRepository imagenRepository;
@@ -46,6 +54,8 @@ public class ResenaService {
     private final ClienteRepository clienteRepository;
     private final ProductoRepository productoRepository;
     private final EntityManager entityManager;
+    private final CloudinaryStorageService cloudinaryStorageService;
+    private final ResenaMapper resenaMapper;
 
     public ResenaService(
         ResenaRepository resenaRepository,
@@ -53,7 +63,9 @@ public class ResenaService {
         PedidoRepository pedidoRepository,
         ClienteRepository clienteRepository,
         ProductoRepository productoRepository,
-        EntityManager entityManager
+        EntityManager entityManager,
+        CloudinaryStorageService cloudinaryStorageService,
+        ResenaMapper resenaMapper
     ) {
         this.resenaRepository = resenaRepository;
         this.imagenRepository = imagenRepository;
@@ -61,6 +73,8 @@ public class ResenaService {
         this.clienteRepository = clienteRepository;
         this.productoRepository = productoRepository;
         this.entityManager = entityManager;
+        this.cloudinaryStorageService = cloudinaryStorageService;
+        this.resenaMapper = resenaMapper;
     }
 
     @Transactional
@@ -86,7 +100,26 @@ public class ResenaService {
         resenaRepository.saveAndFlush(resena);
         entityManager.refresh(resena);
         reemplazarImagenes(resena.getId(), request.imagenes());
-        return mapear(resena, producto, cliente, imagenesPorResena(resena.getId()));
+        return resenaMapper.toResponse(resena, producto, cliente, imagenesPorResena(resena.getId()));
+    }
+
+    @Transactional
+    public ResenaResponse crearConImagenes(CrearResenaRequest request, List<MultipartFile> archivos) {
+        validarCompraParaCarga(request.pedidoId(), request.productoId());
+        List<ResenaImagenRequest> imagenesCargadas = cargarImagenes(archivos);
+        List<ResenaImagenRequest> imagenes = combinarImagenes(request.imagenes(), imagenesCargadas);
+        try {
+            return crear(new CrearResenaRequest(
+                request.productoId(),
+                request.pedidoId(),
+                request.calificacion(),
+                request.comentario(),
+                imagenes
+            ));
+        } catch (RuntimeException exception) {
+            limpiarImagenesCargadas(imagenesCargadas, exception);
+            throw exception;
+        }
     }
 
     @Transactional
@@ -106,7 +139,29 @@ public class ResenaService {
 
         Producto producto = productoRepository.findById(resena.getIdProducto())
             .orElseThrow(() -> new ResourceNotFoundException("Producto de la reseña no encontrado"));
-        return mapear(resena, producto, cliente, imagenesPorResena(resena.getId()));
+        return resenaMapper.toResponse(resena, producto, cliente, imagenesPorResena(resena.getId()));
+    }
+
+    @Transactional
+    public ResenaResponse actualizarConImagenes(
+        UUID resenaId,
+        ActualizarResenaRequest request,
+        List<MultipartFile> archivos
+    ) {
+        validarCompraParaCarga(request.pedidoId(), obtenerProductoResena(resenaId));
+        List<ResenaImagenRequest> imagenesCargadas = cargarImagenes(archivos);
+        List<ResenaImagenRequest> imagenes = combinarImagenes(request.imagenes(), imagenesCargadas);
+        try {
+            return actualizar(resenaId, new ActualizarResenaRequest(
+                request.pedidoId(),
+                request.calificacion(),
+                request.comentario(),
+                imagenes
+            ));
+        } catch (RuntimeException exception) {
+            limpiarImagenesCargadas(imagenesCargadas, exception);
+            throw exception;
+        }
     }
 
     @Transactional
@@ -124,19 +179,9 @@ public class ResenaService {
         Page<ResenaPublicaProjection> resenas = resenaRepository.listarPublicas(productoId, pageable);
         List<UUID> ids = resenas.getContent().stream().map(ResenaPublicaProjection::getId).toList();
         Map<UUID, List<ResenaImagenResponse>> imagenesPorId = agruparImagenes(ids);
-        return resenas.map(resena -> new ResenaResponse(
-            resena.getId(),
-            resena.getProductoId(),
-            resena.getProductoCodigo(),
-            resena.getProductoNombre(),
-            resena.getClienteId(),
-            resena.getClienteNombre(),
-            resena.getPedidoId(),
-            resena.getCalificacion(),
-            resena.getComentario(),
-            resena.getCreadoEn(),
-            imagenesPorId.getOrDefault(resena.getId(), List.of())
-        ));
+        return resenas.map(resena ->
+            resenaMapper.toPublicResponse(resena, imagenesPorId.getOrDefault(resena.getId(), List.of()))
+        );
     }
 
     @Transactional(readOnly = true)
@@ -144,16 +189,7 @@ public class ResenaService {
         validarProducto(productoId);
         ResumenResenasProjection resumen = resenaRepository.obtenerResumen(productoId)
             .orElseThrow(() -> new ResourceNotFoundException("Resumen de reseñas no encontrado"));
-        return new ResumenResenasResponse(
-            resumen.getProductoId(),
-            resumen.getCantidadResenas(),
-            resumen.getCalificacionPromedio(),
-            resumen.getCincoEstrellas(),
-            resumen.getCuatroEstrellas(),
-            resumen.getTresEstrellas(),
-            resumen.getDosEstrellas(),
-            resumen.getUnaEstrella()
-        );
+        return resenaMapper.toSummary(resumen);
     }
 
     private void validarCompraCompletada(UUID pedidoId, UUID clienteId, UUID productoId) {
@@ -161,6 +197,78 @@ public class ResenaService {
             throw new BusinessException(
                 "Solo puedes reseñar productos incluidos en uno de tus pedidos completados"
             );
+        }
+    }
+
+    private void validarCompraParaCarga(UUID pedidoId, UUID productoId) {
+        Cliente cliente = clienteAutenticado();
+        validarProducto(productoId);
+        validarCompraCompletada(pedidoId, cliente.getId(), productoId);
+    }
+
+    private UUID obtenerProductoResena(UUID resenaId) {
+        Cliente cliente = clienteAutenticado();
+        return resenaRepository.findByIdAndIdClienteAndActivoTrue(resenaId, cliente.getId())
+            .orElseThrow(() -> new ResourceNotFoundException("Reseña no encontrada"))
+            .getIdProducto();
+    }
+
+    private List<ResenaImagenRequest> cargarImagenes(List<MultipartFile> archivos) {
+        if (archivos == null || archivos.isEmpty()) {
+            return List.of();
+        }
+        if (archivos.size() > MAX_IMAGES_PER_REVIEW) {
+            throw new BusinessException("Puedes adjuntar como máximo 5 imágenes por reseña.");
+        }
+        List<ResenaImagenRequest> imagenes = new ArrayList<>(archivos.size());
+        try {
+            for (MultipartFile archivo : archivos) {
+                CloudinaryStorageService.CloudinaryAsset asset = cloudinaryStorageService.upload(
+                    archivo,
+                    cloudinaryStorageService.reviewImageFolder(),
+                    null
+                );
+                imagenes.add(new ResenaImagenRequest(asset.url(), asset.publicId()));
+            }
+            return imagenes;
+        } catch (RuntimeException exception) {
+            limpiarImagenesCargadas(imagenes, exception);
+            throw exception;
+        }
+    }
+
+    private List<ResenaImagenRequest> combinarImagenes(
+        List<ResenaImagenRequest> existentes,
+        List<ResenaImagenRequest> cargadas
+    ) {
+        List<ResenaImagenRequest> imagenes = new ArrayList<>();
+        if (existentes != null) {
+            imagenes.addAll(existentes);
+        }
+        imagenes.addAll(cargadas);
+        if (imagenes.size() > MAX_IMAGES_PER_REVIEW) {
+            BusinessException exception = new BusinessException("Puedes adjuntar como máximo 5 imágenes por reseña.");
+            limpiarImagenesCargadas(cargadas, exception);
+            throw exception;
+        }
+        return imagenes;
+    }
+
+    private void limpiarImagenesCargadas(List<ResenaImagenRequest> imagenes, RuntimeException causa) {
+        for (ResenaImagenRequest imagen : imagenes) {
+            if (imagen.publicId() == null || imagen.publicId().isBlank()) {
+                continue;
+            }
+            try {
+                cloudinaryStorageService.delete(imagen.publicId());
+            } catch (RuntimeException cleanupException) {
+                LOGGER.error(
+                    "Could not remove uploaded review image {} after review operation failed",
+                    imagen.publicId(),
+                    cleanupException
+                );
+                causa.addSuppressed(cleanupException);
+            }
         }
     }
 
@@ -227,7 +335,7 @@ public class ResenaService {
 
     private List<ResenaImagenResponse> imagenesPorResena(UUID resenaId) {
         return imagenRepository.findByIdResenaOrderByOrdenAsc(resenaId).stream()
-            .map(this::mapear)
+            .map(resenaMapper::toImageResponse)
             .toList();
     }
 
@@ -236,7 +344,7 @@ public class ResenaService {
             return Map.of();
         }
         return imagenRepository.findByIdResenaInOrderByIdResenaAscOrdenAsc(resenaIds).stream()
-            .map(imagen -> Map.entry(imagen.getIdResena(), mapear(imagen)))
+            .map(imagen -> Map.entry(imagen.getIdResena(), resenaMapper.toImageResponse(imagen)))
             .collect(Collectors.groupingBy(
                 Map.Entry::getKey,
                 HashMap::new,
@@ -244,28 +352,4 @@ public class ResenaService {
             ));
     }
 
-    private ResenaResponse mapear(
-        Resena resena,
-        Producto producto,
-        Cliente cliente,
-        List<ResenaImagenResponse> imagenes
-    ) {
-        return new ResenaResponse(
-            resena.getId(),
-            resena.getIdProducto(),
-            producto.getCodigo(),
-            producto.getNombre(),
-            resena.getIdCliente(),
-            cliente.getNombres() + " " + cliente.getApellidos(),
-            resena.getIdPedido(),
-            resena.getCalificacion(),
-            resena.getComentario(),
-            resena.getCreatedAt(),
-            imagenes
-        );
-    }
-
-    private ResenaImagenResponse mapear(ResenaImagen imagen) {
-        return new ResenaImagenResponse(imagen.getId(), imagen.getUrl(), imagen.getOrden());
-    }
 }

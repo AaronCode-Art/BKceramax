@@ -40,12 +40,49 @@ class ComprobantePdfServiceTest {
             assertTrue(texto.contains("B001-00001234"));
             assertTrue(texto.contains("DATOS DEL CLIENTE"));
             assertTrue(texto.contains("DATOS DEL PEDIDO"));
+            assertTrue(texto.contains("RECOJO EN TIENDA"));
+            assertTrue(texto.contains("Destinatario: María Cerámica"));
+            assertTrue(texto.contains("Teléfono: 999111222"));
+            assertTrue(texto.contains("Sucursal: Sucursal central"));
+            assertTrue(texto.contains("Dirección de recojo: Av. Principal 123"));
             assertTrue(texto.contains("DESCRIPCION"));
             assertTrue(texto.contains("Maceta decorativa"));
             assertTrue(texto.contains("Tarjeta - APROBADO"));
             assertTrue(texto.contains("TOTAL"));
             assertTrue(texto.contains("S/ 59.00"));
             assertTrue(texto.contains("Documento informativo. No reemplaza un comprobante tributario"));
+        }
+    }
+
+    @Test
+    void incluyeDatosCompletosCuandoElPedidoEsDelivery() throws Exception {
+        UUID pedidoId = UUID.randomUUID();
+        PedidoComprobanteResponse base = comprobante(pedidoId);
+        PedidoResponse pedido = pedidoConDelivery(base.pedido());
+        when(pedidoService.obtenerDatosComprobante(pedidoId)).thenReturn(new PedidoComprobanteResponse(
+            pedido,
+            base.clienteNombre(),
+            base.clienteTipoDocumento(),
+            base.clienteNumeroDocumento(),
+            base.clienteEmail(),
+            base.ruc(),
+            base.razonSocial(),
+            base.sucursalNombre(),
+            base.sucursalDireccion(),
+            base.fechaEmision()
+        ));
+
+        byte[] pdf = comprobantePdfService.generar(pedidoId);
+
+        try (var documento = Loader.loadPDF(pdf)) {
+            String texto = new PDFTextStripper().getText(documento);
+            assertTrue(texto.contains("DELIVERY A DOMICILIO"));
+            assertTrue(texto.contains("Destinatario: María Cerámica"));
+            assertTrue(texto.contains("Teléfono: 999111222"));
+            assertTrue(texto.contains("Dirección: Av. Principal 123, Miraflores, Lima, Lima"));
+            assertTrue(texto.contains("Código postal: 15074"));
+            assertTrue(texto.contains("Referencia: Casa azul"));
+            assertTrue(texto.contains("Delivery asignado: Juan Delivery"));
         }
     }
 
@@ -71,6 +108,8 @@ class ComprobantePdfServiceTest {
             pedido.tipoComprobante(),
             pedido.serie(),
             pedido.numeroComprobante(),
+            pedido.ruc(),
+            pedido.razonSocial(),
             pedido.subtotal(),
             pedido.descuentoCupon(),
             pedido.costoEnvio(),
@@ -111,7 +150,7 @@ class ComprobantePdfServiceTest {
             pedidoId,
             "PED-00001234",
             "PRESENCIAL",
-            "TIENDA",
+            "RECOJO_TIENDA",
             "COMPLETADA",
             "Completada",
             null,
@@ -121,6 +160,8 @@ class ComprobantePdfServiceTest {
             "BOLETA",
             "B001",
             "00001234",
+            null,
+            null,
             new BigDecimal("50.00"),
             BigDecimal.ZERO,
             BigDecimal.ZERO,
@@ -174,6 +215,37 @@ class ComprobantePdfServiceTest {
             "Sucursal central",
             "Av. Principal 123",
             OffsetDateTime.of(2026, 10, 4, 18, 0, 0, 0, ZoneOffset.ofHours(-5))
+        );
+    }
+
+    private PedidoResponse pedidoConDelivery(PedidoResponse pedido) {
+        return new PedidoResponse(
+            pedido.id(),
+            pedido.codigo(),
+            pedido.canal(),
+            "DELIVERY",
+            pedido.estadoCodigo(),
+            pedido.estadoNombre(),
+            pedido.logisticaId(),
+            pedido.logisticaNombre(),
+            UUID.randomUUID(),
+            "Juan Delivery",
+            pedido.tipoComprobante(),
+            pedido.serie(),
+            pedido.numeroComprobante(),
+            pedido.ruc(),
+            pedido.razonSocial(),
+            pedido.subtotal(),
+            pedido.descuentoCupon(),
+            pedido.costoEnvio(),
+            pedido.igv(),
+            pedido.total(),
+            pedido.tieneReserva(),
+            pedido.despachado(),
+            pedido.createdAt(),
+            pedido.detalles(),
+            pedido.pagos(),
+            pedido.datosEntrega()
         );
     }
 }

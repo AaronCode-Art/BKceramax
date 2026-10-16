@@ -7,6 +7,8 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,10 +23,12 @@ public class JwtService {
     private long expirationMinutes;
 
     private Key key;
+    private Instant serverStartedAt;
 
     @PostConstruct
     public void init() {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.serverStartedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     }
 
     public String generateToken(String subject, String role) {
@@ -45,7 +49,10 @@ public class JwtService {
     public boolean isTokenValid(String token) {
         try {
             Claims claims = parseClaims(token);
-            return !claims.getExpiration().before(new Date());
+            Date issuedAt = claims.getIssuedAt();
+            return !claims.getExpiration().before(new Date())
+                && issuedAt != null
+                && !issuedAt.toInstant().isBefore(serverStartedAt);
         } catch (Exception ex) {
             return false;
         }

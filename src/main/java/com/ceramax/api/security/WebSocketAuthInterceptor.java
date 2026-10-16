@@ -22,6 +22,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
+    private static final String AUTHENTICATION_SESSION_ATTRIBUTE = WebSocketAuthInterceptor.class.getName()
+            + ".authentication";
     private static final Set<String> DESTINOS_LOGISTICA = Set.of(
             "/topic/logistica/alertas",
             "/topic/logistica/traslados");
@@ -68,17 +70,21 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     email,
                     null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+            if (accessor.getSessionAttributes() != null) {
+                accessor.getSessionAttributes().put(AUTHENTICATION_SESSION_ATTRIBUTE, authentication);
+            }
             accessor.setUser(authentication);
             return MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
         }
 
+        java.security.Principal principal = obtenerPrincipal(accessor);
         if (StompCommand.SEND.equals(accessor.getCommand())) {
             Matcher matcher = SEND_CHAT_DESTINATION.matcher(
                     accessor.getDestination() == null ? "" : accessor.getDestination());
             if (!matcher.matches()) {
                 throw new MessageDeliveryException(message, "Destino de envío WebSocket no permitido");
             }
-            validarAccesoChat(matcher.group(1), matcher.group(2), accessor.getUser(), message);
+            validarAccesoChat(matcher.group(1), matcher.group(2), principal, message);
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
                 && accessor.getDestination() != null
                 && (accessor.getDestination().startsWith("/topic/chat/")
@@ -88,7 +94,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 throw new MessageDeliveryException(message, "Suscripción WebSocket no permitida");
             }
             String tipo = "chat".equals(matcher.group(1)) ? "soporte" : "interno";
-            validarAccesoChat(tipo, matcher.group(2), accessor.getUser(), message);
+            validarAccesoChat(tipo, matcher.group(2), principal, message);
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
                 && accessor.getDestination() != null
                 && accessor.getDestination().startsWith("/topic/logistica/")) {
@@ -96,7 +102,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     || accessor.getSubscriptionId() == null) {
                 throw new MessageDeliveryException(message, "Suscripción WebSocket no permitida");
             }
-            validarAccesoLogistica(accessor.getUser(), message);
+            validarAccesoLogistica(principal, message);
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
                 && accessor.getDestination() != null
                 && accessor.getDestination().startsWith("/topic/")) {
@@ -105,7 +111,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 && accessor.getDestination() != null) {
             if (!DESTINO_PEDIDOS_USUARIO.equals(accessor.getDestination())
                     || accessor.getSubscriptionId() == null
-                    || !(accessor.getUser() instanceof Authentication authentication)
+                    || !(principal instanceof Authentication authentication)
                     || !authentication.isAuthenticated()) {
                 throw new MessageDeliveryException(message, "Suscripción WebSocket no permitida");
             }
@@ -116,6 +122,22 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         return message;
+    }
+
+    private java.security.Principal obtenerPrincipal(StompHeaderAccessor accessor) {
+        java.security.Principal principal = accessor.getUser();
+        if (principal instanceof Authentication) {
+            return principal;
+        }
+        if (accessor.getSessionAttributes() == null) {
+            return principal;
+        }
+        Object authentication = accessor.getSessionAttributes().get(AUTHENTICATION_SESSION_ATTRIBUTE);
+        if (authentication instanceof Authentication storedAuthentication) {
+            accessor.setUser(storedAuthentication);
+            return storedAuthentication;
+        }
+        return principal;
     }
 
     private void validarAccesoChat(

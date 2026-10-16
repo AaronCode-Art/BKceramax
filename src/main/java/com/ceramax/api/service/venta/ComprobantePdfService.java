@@ -52,6 +52,7 @@ public class ComprobantePdfService {
 
             PdfPage pagina = nuevaPagina(documento, paginas, normal, negrita, false);
             dibujarDatosCliente(pagina, comprobante, normal, negrita);
+            pagina.y = dibujarDatosEntrega(pagina, comprobante, normal, negrita, pagina.y);
             pagina.y = dibujarEncabezadoTabla(pagina, normal, negrita, pagina.y);
 
             for (int indiceDetalle = 0; indiceDetalle < comprobante.pedido().detalles().size(); indiceDetalle++) {
@@ -136,6 +137,113 @@ public class ComprobantePdfService {
             texto(pagina.contenido, "Correo: " + comprobante.clienteEmail(), MARGIN, detalleY + 34, normal, 8, MUTED);
         }
         pagina.y = detalleY + 58;
+    }
+
+    private float dibujarDatosEntrega(
+        PdfPage pagina,
+        PedidoComprobanteResponse comprobante,
+        PDFont normal,
+        PDFont negrita,
+        float top
+    ) throws IOException {
+        PedidoResponse pedido = comprobante.pedido();
+        var entrega = pedido.datosEntrega();
+        boolean esDelivery = "DELIVERY".equals(pedido.tipoEntrega());
+        String titulo = esDelivery ? "DELIVERY A DOMICILIO" : "RECOJO EN TIENDA";
+
+        List<String> columnaIzquierda = new ArrayList<>();
+        List<String> columnaDerecha = new ArrayList<>();
+        columnaIzquierda.add("Destinatario: " + valor(
+            entrega == null ? null : entrega.destinatario(),
+            valor(comprobante.clienteNombre(), "No especificado")
+        ));
+        if (entrega != null && entrega.telefono() != null && !entrega.telefono().isBlank()) {
+            columnaIzquierda.add("Teléfono: " + entrega.telefono());
+        }
+
+        if (esDelivery) {
+            String direccion = entrega == null ? null : unirValores(
+                entrega.direccion(),
+                entrega.distrito(),
+                entrega.provincia(),
+                entrega.departamento()
+            );
+            columnaIzquierda.add("Dirección: " + valor(direccion, "No especificada"));
+            if (entrega != null && entrega.codigoPostal() != null && !entrega.codigoPostal().isBlank()) {
+                columnaDerecha.add("Código postal: " + entrega.codigoPostal());
+            }
+            if (entrega != null && entrega.referencia() != null && !entrega.referencia().isBlank()) {
+                columnaDerecha.add("Referencia: " + entrega.referencia());
+            }
+            if (pedido.deliveryNombre() != null && !pedido.deliveryNombre().isBlank()) {
+                columnaDerecha.add("Delivery asignado: " + pedido.deliveryNombre());
+            }
+        } else {
+            columnaDerecha.add("Sucursal: " + valor(
+                entrega == null ? null : entrega.sucursalNombre(),
+                valor(comprobante.sucursalNombre(), "No especificada")
+            ));
+            columnaDerecha.add("Dirección de recojo: " + valor(
+                entrega == null ? null : entrega.sucursalDireccion(),
+                valor(comprobante.sucursalDireccion(), "No especificada")
+            ));
+        }
+
+        float columnaAncho = (CONTENT_WIDTH - 32) / 2;
+        List<List<String>> lineasIzquierda = envolverDatos(columnaIzquierda, normal, columnaAncho - 12);
+        List<List<String>> lineasDerecha = envolverDatos(columnaDerecha, normal, columnaAncho - 12);
+        int lineas = 0;
+        for (List<String> fila : lineasIzquierda) lineas += fila.size();
+        int alturaIzquierda = lineas;
+        lineas = 0;
+        for (List<String> fila : lineasDerecha) lineas += fila.size();
+        int alturaDerecha = lineas;
+        int altoContenido = Math.max(alturaIzquierda, alturaDerecha);
+        float cajaTop = top + 16;
+        float cajaAlto = 18 + altoContenido * 12;
+
+        caja(pagina.contenido, MARGIN, top, CONTENT_WIDTH, 15, TERRACOTTA);
+        texto(pagina.contenido, titulo, MARGIN + 8, top + 3, negrita, 8, Color.WHITE);
+        caja(pagina.contenido, MARGIN, cajaTop, CONTENT_WIDTH, cajaAlto, PALE);
+
+        float izquierdaX = MARGIN + 10;
+        float derechaX = MARGIN + 22 + columnaAncho;
+        dibujarLineasDatos(pagina, lineasIzquierda, izquierdaX, cajaTop + 8, normal);
+        dibujarLineasDatos(pagina, lineasDerecha, derechaX, cajaTop + 8, normal);
+        linea(pagina.contenido, PAGE_WIDTH / 2, cajaTop + 5, PAGE_WIDTH / 2, cajaTop + cajaAlto - 5, RULE);
+        return cajaTop + cajaAlto + 12;
+    }
+
+    private List<List<String>> envolverDatos(List<String> datos, PDFont fuente, float ancho) throws IOException {
+        List<List<String>> resultado = new ArrayList<>();
+        for (String dato : datos) {
+            resultado.add(ajustarTexto(dato, fuente, 8, ancho));
+        }
+        return resultado;
+    }
+
+    private void dibujarLineasDatos(
+        PdfPage pagina,
+        List<List<String>> datos,
+        float x,
+        float top,
+        PDFont fuente
+    ) throws IOException {
+        float actualY = top;
+        for (List<String> lineas : datos) {
+            for (String lineaTexto : lineas) {
+                texto(pagina.contenido, lineaTexto, x, actualY, fuente, 8, INK);
+                actualY += 12;
+            }
+        }
+    }
+
+    private String unirValores(String... valores) {
+        List<String> presentes = new ArrayList<>();
+        for (String valor : valores) {
+            if (valor != null && !valor.isBlank()) presentes.add(valor.trim());
+        }
+        return String.join(", ", presentes);
     }
 
     private float dibujarEncabezadoTabla(PdfPage pagina, PDFont normal, PDFont negrita, float top) throws IOException {
@@ -223,19 +331,6 @@ public class ComprobantePdfService {
         if (comprobante.sucursalNombre() != null && !comprobante.sucursalNombre().isBlank()) {
             texto(pagina.contenido, "Atendido por: " + comprobante.sucursalNombre(), MARGIN, infoY + 5, normal, 8, MUTED);
             infoY += 18;
-        }
-        if (pedido.datosEntrega() != null) {
-            var entrega = pedido.datosEntrega();
-            String destino = pedido.tipoEntrega() != null && pedido.tipoEntrega().equals("RECOJO_TIENDA")
-                ? valor(entrega.sucursalNombre(), "Recojo en tienda")
-                : valor(entrega.direccion(), "");
-            if (!destino.isBlank()) {
-                texto(pagina.contenido, "ENTREGA", MARGIN, infoY + 6, negrita, 8, TERRACOTTA);
-                List<String> direccion = ajustarTexto(destino, normal, 8, totalX - MARGIN - 20);
-                for (int indice = 0; indice < direccion.size(); indice++) {
-                    texto(pagina.contenido, direccion.get(indice), MARGIN, infoY + 22 + indice * 11, normal, 8, MUTED);
-                }
-            }
         }
     }
 

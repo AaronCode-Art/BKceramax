@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.ceramax.api.service.soporte.ChatService;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,6 +78,45 @@ class WebSocketAuthInterceptorTest {
             .thenReturn(false);
 
         assertThrows(MessageDeliveryException.class, () -> interceptor.preSend(message, channel));
+    }
+
+    @Test
+    void permiteSuscripcionDeVendedorAChatInternoCompartido() {
+        UUID chatId = UUID.randomUUID();
+        Message<?> message = message(
+            StompCommand.SUBSCRIBE,
+            "/topic/chat-interno/" + chatId,
+            "subscription-1",
+            authenticatedAs("VENDEDOR")
+        );
+        when(chatService.puedeAcceder("interno", chatId, "cliente@example.com", "VENDEDOR"))
+            .thenReturn(true);
+
+        assertSame(message, interceptor.preSend(message, channel));
+    }
+
+    @Test
+    void autenticaLaSuscripcionDesdeLaSesionWebSocketCreadaPorConnect() {
+        UUID chatId = UUID.randomUUID();
+        Map<String, Object> sessionAttributes = new HashMap<>();
+        var connectAccessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        connectAccessor.addNativeHeader("Authorization", "Bearer " + "jwt-valido");
+        connectAccessor.setSessionAttributes(sessionAttributes);
+        connectAccessor.setLeaveMutable(true);
+        when(jwtService.isTokenValid("jwt-valido")).thenReturn(true);
+        when(jwtService.extractEmail("jwt-valido")).thenReturn("miembro@example.com");
+        when(jwtService.extractRole("jwt-valido")).thenReturn("VENDEDOR");
+        interceptor.preSend(MessageBuilder.createMessage(new byte[0], connectAccessor.getMessageHeaders()), channel);
+
+        StompHeaderAccessor subscribeAccessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        subscribeAccessor.setDestination("/topic/chat-interno/" + chatId);
+        subscribeAccessor.setSubscriptionId("subscription-1");
+        subscribeAccessor.setSessionAttributes(sessionAttributes);
+        subscribeAccessor.setLeaveMutable(true);
+        Message<?> subscribe = MessageBuilder.createMessage(new byte[0], subscribeAccessor.getMessageHeaders());
+        when(chatService.puedeAcceder("interno", chatId, "miembro@example.com", "VENDEDOR")).thenReturn(true);
+
+        assertSame(subscribe, interceptor.preSend(subscribe, channel));
     }
 
     @Test

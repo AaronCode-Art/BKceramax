@@ -65,7 +65,8 @@ class AuditoriaEventListenerTest {
             "CLIENTE",
             "contenido privado",
             false,
-            OffsetDateTime.now()
+            OffsetDateTime.now(),
+            java.util.List.of()
         );
 
         listener.auditarMensajeChat(new MensajeChatEvent("soporte", chatId, mensaje));

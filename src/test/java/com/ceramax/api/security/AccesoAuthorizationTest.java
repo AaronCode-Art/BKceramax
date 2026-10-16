@@ -5,17 +5,26 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
 import com.ceramax.api.dto.request.ClienteRequest;
+import com.ceramax.api.dto.request.ActualizarDatosEntregaClienteRequest;
+import com.ceramax.api.dto.request.BuscarClienteRegistroRequest;
 import com.ceramax.api.dto.request.UsuarioRequest;
 import com.ceramax.api.dto.response.ClienteResponse;
+import com.ceramax.api.service.catalogo.ProductoService;
 import com.ceramax.api.service.acceso.ClienteService;
 import com.ceramax.api.service.acceso.UsuarioService;
+import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +46,39 @@ class AccesoAuthorizationTest {
 
     @MockitoBean
     private ClienteService clienteService;
+
+    @MockitoBean
+    private ProductoService productoService;
+
+    @Test
+    @WithMockUser(roles = "LOGISTICA")
+    void logisticaPuedeConsultarProductosParaRegistrarEntradasPeroNoAdministrarlos() throws Exception {
+        when(productoService.listarPagina(any())).thenReturn(
+            new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)
+        );
+
+        mockMvc.perform(get("/api/v1/catalogo/productos")
+                .with(user("logistica").roles("LOGISTICA")))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/catalogo/productos")
+                .with(user("logistica").roles("LOGISTICA"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "codigo": "PRO-TEST",
+                      "categoriaId": "%s",
+                      "nombre": "Producto de prueba",
+                      "descripcion": "",
+                      "especificaciones": [],
+                      "precio": 10.00,
+                      "descuentoPorcentaje": 0,
+                      "activo": true
+                    }
+                    """.formatted(UUID.randomUUID())))
+            .andExpect(status().isForbidden());
+
+        verify(productoService, never()).crear(any());
+    }
 
     @Test
     @WithMockUser(roles = "CLIENTE")
@@ -150,6 +192,75 @@ class AccesoAuthorizationTest {
 
         mockMvc.perform(get("/api/v1/clientes")).andExpect(status().isForbidden());
         verify(clienteService).registrar(any(ClienteRequest.class));
+    }
+
+    @Test
+    void permiteBuscarDatosDeRegistroPorDocumentoSinToken() throws Exception {
+        when(clienteService.buscarDatosParaRegistro(any(BuscarClienteRegistroRequest.class)))
+            .thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/api/v1/clientes/registro/buscar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "tipoDocumento": "DNI",
+                      "numeroDocumento": "70903432"
+                    }
+                    """))
+            .andExpect(status().isNoContent());
+
+        verify(clienteService).buscarDatosParaRegistro(any(BuscarClienteRegistroRequest.class));
+    }
+
+    @Test
+    @WithMockUser(username = "cliente@example.test", roles = "CLIENTE")
+    void clientePuedeActualizarSoloSusDatosDeEntrega() throws Exception {
+        when(clienteService.actualizarMisDatosEntrega(any(ActualizarDatosEntregaClienteRequest.class)))
+            .thenReturn(new ClienteResponse(
+                UUID.randomUUID(), "CLI-TEST", "Test", "Cliente", "cliente@example.test",
+                "DNI", "12345678", "987654321", "Lima", "Lima", "Barranco",
+                "Jr. Ejemplo 123", "15001", "Cerca del parque", "150104", true, null, null
+            ));
+
+        mockMvc.perform(patch("/api/v1/clientes/mio/datos-entrega")
+                .with(user("cliente@example.test").roles("CLIENTE"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "telefono": "987654321",
+                      "departamento": "Lima",
+                      "provincia": "Lima",
+                      "distrito": "Barranco",
+                      "direccion": "Jr. Ejemplo 123",
+                      "codigoPostal": "15001",
+                      "referencia": "Cerca del parque",
+                      "idUbigeo": "150104"
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        verify(clienteService).actualizarMisDatosEntrega(any(ActualizarDatosEntregaClienteRequest.class));
+    }
+
+    @Test
+    @WithMockUser(roles = "VENDEDOR")
+    void personalNoPuedeActualizarElPerfilDeEntregaDeUnCliente() throws Exception {
+        mockMvc.perform(patch("/api/v1/clientes/mio/datos-entrega")
+                .with(user("vendedor").roles("VENDEDOR"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "telefono": "987654321",
+                      "departamento": "Lima",
+                      "provincia": "Lima",
+                      "distrito": "Barranco",
+                      "direccion": "Jr. Ejemplo 123"
+                    }
+                    """))
+            .andExpect(status().isForbidden());
+
+        verify(clienteService, never())
+            .actualizarMisDatosEntrega(any(ActualizarDatosEntregaClienteRequest.class));
     }
 
     @Test

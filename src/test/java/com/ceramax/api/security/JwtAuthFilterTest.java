@@ -2,11 +2,15 @@ package com.ceramax.api.security;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +69,20 @@ class JwtAuthFilterTest {
 
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
         verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    void responde401CuandoElJwtNoEsValido() throws Exception {
+        MockHttpServletRequest request = requestWithToken();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = org.mockito.Mockito.mock(FilterChain.class);
+        when(jwtService.isTokenValid("valid-token")).thenReturn(false);
+
+        filter.filter(request, response, chain);
+
+        assertEquals(HttpServletResponse.SC_UNAUTHORIZED, response.getStatus());
+        assertTrue(response.getContentAsString().contains("La sesión venció"));
+        verify(chain, never()).doFilter(request, response);
     }
 
     private MockHttpServletRequest requestWithToken() {

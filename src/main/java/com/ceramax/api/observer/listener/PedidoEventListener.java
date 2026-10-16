@@ -4,6 +4,8 @@ import com.ceramax.api.observer.event.PedidoCreadoEvent;
 import com.ceramax.api.observer.event.PedidoEstadoCambiadoEvent;
 import com.ceramax.api.observer.event.PedidoNotificacion;
 import com.ceramax.api.service.soporte.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -13,6 +15,7 @@ import org.springframework.web.util.HtmlUtils;
 @Component
 public class PedidoEventListener {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(PedidoEventListener.class);
     private final EmailService emailService;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -69,7 +72,17 @@ public class PedidoEventListener {
 
     private void enviarCorreo(String destinatario, String asunto, String contenido) {
         if (destinatario != null && !destinatario.isBlank()) {
-            emailService.enviarHtml(destinatario, asunto, contenido);
+            emailService.enviarHtml(destinatario, asunto, contenido)
+                .whenComplete((ignored, exception) -> {
+                    if (exception != null) {
+                        LOGGER.error(
+                            "Order email notification failed for {}. Subject: {}",
+                            destinatario,
+                            asunto,
+                            exception
+                        );
+                    }
+                });
         }
     }
 }

@@ -7,8 +7,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ceramax.api.exception.BusinessException;
+import com.ceramax.api.mappers.reportes.ReporteMapper;
 import com.ceramax.api.repository.reportes.ReporteRepository;
 import com.ceramax.api.repository.reportes.ReporteRepository.ResumenVentas;
+import com.ceramax.api.repository.reportes.ReporteRepository.ResumenPagos;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -20,7 +22,7 @@ class ReporteServiceTest {
 
     private final ReporteRepository reporteRepository = org.mockito.Mockito.mock(ReporteRepository.class);
     private final ReporteExportService exportService = org.mockito.Mockito.mock(ReporteExportService.class);
-    private final ReporteService service = new ReporteService(reporteRepository, exportService);
+    private final ReporteService service = new ReporteService(reporteRepository, exportService, new ReporteMapper());
 
     @Test
     void generaReporteConRangoUtcInclusivoYInventarioActual() {
@@ -31,6 +33,8 @@ class ReporteServiceTest {
         when(reporteRepository.obtenerResumenVentas(inicio, fin))
             .thenReturn(new ResumenVentas(0L, 0L, 0L, BigDecimal.ZERO));
         when(reporteRepository.listarProductosMasVendidos(inicio, fin)).thenReturn(List.of());
+        when(reporteRepository.listarResumenPagos(inicio, fin))
+            .thenReturn(List.of(new ResumenPagos("EFECTIVO", "APROBADO", 2L, new BigDecimal("50.00"))));
         when(reporteRepository.listarInventarioActual()).thenReturn(List.of());
 
         var reporte = service.generar(desde, hasta);
@@ -39,6 +43,8 @@ class ReporteServiceTest {
         assertEquals(hasta, reporte.hasta());
         assertEquals(BigDecimal.ZERO, reporte.ingresosTotales());
         assertEquals(List.of(), reporte.productosMasVendidos());
+        assertEquals(1, reporte.resumenPagos().size());
+        assertEquals("EFECTIVO", reporte.resumenPagos().get(0).metodoPago());
         assertEquals(ZoneOffset.UTC, reporte.generadoEn().getOffset());
         verify(reporteRepository).obtenerResumenVentas(inicio, fin);
     }

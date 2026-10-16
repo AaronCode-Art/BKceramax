@@ -15,6 +15,7 @@ import com.ceramax.api.repository.venta.PedidoEstadoHistorialProjection;
 import com.ceramax.api.exception.BusinessException;
 import com.ceramax.api.factory.ComprobanteFactory;
 import com.ceramax.api.factory.PedidoFactory;
+import com.ceramax.api.mappers.venta.PedidoMapper;
 import com.ceramax.api.model.acceso.Usuario;
 import com.ceramax.api.model.acceso.Cliente;
 import com.ceramax.api.model.acceso.Rol;
@@ -72,7 +73,8 @@ class PedidoServiceDeliveryTest {
         mock(ComprobanteFactory.class),
         mock(ApplicationEventPublisher.class),
         mock(EntityManager.class),
-        mock(StockBajoEventPublisher.class)
+        mock(StockBajoEventPublisher.class),
+        new PedidoMapper()
     );
 
     @AfterEach
@@ -215,6 +217,26 @@ class PedidoServiceDeliveryTest {
         org.junit.jupiter.api.Assertions.assertFalse(response.ultima());
         verify(detallePedidoRepository, never())
             .findByPedido_IdInOrderByPedido_IdAscIdAsc(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void vendedorSoloListaPedidosQueLePertenecen() {
+        UUID vendedorId = UUID.randomUUID();
+        Usuario vendedor = new Usuario();
+        vendedor.setId(vendedorId);
+        vendedor.setActivo(true);
+        PageRequest pageable = PageRequest.of(0, 20);
+        autenticar("vendedor@example.com", "VENDEDOR");
+        when(usuarioRepository.findByEmail("vendedor@example.com")).thenReturn(Optional.of(vendedor));
+        when(pedidoRepository.findByVendedor_IdOrderByCreatedAtDesc(vendedorId, pageable))
+            .thenReturn(new PageImpl<>(List.of(pedido("PED-VENDEDOR")), pageable, 1));
+
+        var response = pedidoService.listarPaginaVisible(pageable);
+
+        assertEquals(1, response.contenido().size());
+        assertEquals("PED-VENDEDOR", response.contenido().get(0).codigo());
+        verify(pedidoRepository).findByVendedor_IdOrderByCreatedAtDesc(vendedorId, pageable);
+        verify(pedidoRepository, never()).findAllByOrderByCreatedAtDesc(pageable);
     }
 
     @Test

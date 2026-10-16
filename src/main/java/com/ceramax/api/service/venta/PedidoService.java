@@ -4,25 +4,25 @@ import com.ceramax.api.dto.request.AsignarDeliveryRequest;
 import com.ceramax.api.dto.request.CambiarEstadoPedidoRequest;
 import com.ceramax.api.dto.request.CotizarCheckoutWebRequest;
 import com.ceramax.api.dto.request.CrearPedidoWebRequest;
+import com.ceramax.api.dto.request.DatosClienteVentaRequest;
 import com.ceramax.api.dto.request.DetallePedidoRequest;
 import com.ceramax.api.dto.request.VentaPresencialRequest;
 import com.ceramax.api.dto.response.ComprobanteDatos;
 import com.ceramax.api.dto.response.CheckoutCotizacionResponse;
-import com.ceramax.api.dto.response.DatosEntregaResponse;
+import com.ceramax.api.dto.response.ClienteVentaResponse;
 import com.ceramax.api.dto.response.DeliveryOpcionResponse;
-import com.ceramax.api.dto.response.DetallePedidoResponse;
 import com.ceramax.api.dto.response.PagoResponse;
 import com.ceramax.api.dto.response.PedidoComprobanteResponse;
 import com.ceramax.api.dto.response.PedidoEstadoHistorialResponse;
 import com.ceramax.api.dto.response.PedidoPaginaResponse;
 import com.ceramax.api.dto.response.PedidoResponse;
-import com.ceramax.api.dto.response.PedidoResumenResponse;
 import com.ceramax.api.dto.response.VentaPresencialResponse;
 import com.ceramax.api.exception.BusinessException;
 import com.ceramax.api.exception.ForbiddenException;
 import com.ceramax.api.exception.ResourceNotFoundException;
 import com.ceramax.api.factory.ComprobanteFactory;
 import com.ceramax.api.factory.PedidoFactory;
+import com.ceramax.api.mappers.venta.PedidoMapper;
 import com.ceramax.api.model.acceso.Cliente;
 import com.ceramax.api.model.acceso.Sucursal;
 import com.ceramax.api.model.acceso.Usuario;
@@ -44,7 +44,6 @@ import com.ceramax.api.repository.venta.DetallePedidoRepository;
 import com.ceramax.api.repository.venta.EstadoEnvioRepository;
 import com.ceramax.api.repository.venta.PagoRepository;
 import com.ceramax.api.repository.venta.PedidoRepository;
-import com.ceramax.api.repository.venta.PedidoEstadoHistorialProjection;
 import com.ceramax.api.repository.venta.VentaOperacionRepository;
 import com.ceramax.api.repository.venta.VentaOperacionRepository.ItemVenta;
 import com.ceramax.api.repository.venta.VentaOperacionRepository.VentaPresencialResultado;
@@ -89,6 +88,7 @@ public class PedidoService {
     private final ApplicationEventPublisher eventPublisher;
     private final EntityManager entityManager;
     private final StockBajoEventPublisher stockBajoEventPublisher;
+    private final PedidoMapper pedidoMapper;
 
     public PedidoService(
         PedidoRepository pedidoRepository,
@@ -106,7 +106,8 @@ public class PedidoService {
         ComprobanteFactory comprobanteFactory,
         ApplicationEventPublisher eventPublisher,
         EntityManager entityManager,
-        StockBajoEventPublisher stockBajoEventPublisher
+        StockBajoEventPublisher stockBajoEventPublisher,
+        PedidoMapper pedidoMapper
     ) {
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
@@ -124,6 +125,7 @@ public class PedidoService {
         this.eventPublisher = eventPublisher;
         this.entityManager = entityManager;
         this.stockBajoEventPublisher = stockBajoEventPublisher;
+        this.pedidoMapper = pedidoMapper;
     }
 
     public PedidoWebCheckout prepararCheckoutWeb(CrearPedidoWebRequest request) {
@@ -415,6 +417,7 @@ public class PedidoService {
             request.envioProvincia(),
             request.envioDistrito(),
             request.envioDireccion(),
+            request.envioTelefono(),
             request.envioCodigoPostal(),
             request.envioReferencia(),
             request.envioIdUbigeo(),
@@ -447,11 +450,13 @@ public class PedidoService {
             request.ruc(),
             request.razonSocial()
         );
-        Cliente cliente = request.clienteId() == null
-            ? null
-            : clienteRepository.findById(request.clienteId())
-                .filter(Cliente::getActivo)
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente activo no encontrado"));
+        Cliente cliente = request.datosCliente() != null
+            ? guardarClienteVenta(request.datosCliente(), request.tipoEntrega())
+            : request.clienteId() == null
+                ? null
+                : clienteRepository.findById(request.clienteId())
+                    .filter(Cliente::getActivo)
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente activo no encontrado"));
         List<ItemVenta> items = request.detalles().stream()
             .map(linea -> new ItemVenta(linea.productoId(), linea.cantidad()))
             .toList();
@@ -468,6 +473,32 @@ public class PedidoService {
                 comprobante.razonSocial()
             )
         );
+        if (request.datosCliente() != null) {
+            Pedido pedidoVenta = pedidoRepository.findByIdForUpdate(resultado.pedidoId())
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la venta recién registrada"));
+            DatosClienteVentaRequest datos = request.datosCliente();
+            pedidoVenta.setTipoEntrega(request.tipoEntrega());
+            pedidoVenta.setClienteTipoDocumento(datos.tipoDocumento());
+            pedidoVenta.setClienteNumeroDocumento(datos.numeroDocumento());
+            pedidoVenta.setClienteNombre(datos.nombres().trim() + " " + datos.apellidos().trim());
+            pedidoVenta.setClienteTelefono(datos.telefono().trim());
+            if ("DELIVERY".equals(request.tipoEntrega())) {
+                pedidoVenta.setEnvioDepartamento(datos.departamento().trim());
+                pedidoVenta.setEnvioProvincia(datos.provincia().trim());
+                pedidoVenta.setEnvioDistrito(datos.distrito().trim());
+                pedidoVenta.setEnvioDireccion(datos.direccion().trim());
+                pedidoVenta.setEnvioCodigoPostal(datos.codigoPostal().trim());
+                pedidoVenta.setEnvioReferencia(datos.referencia().trim());
+                pedidoVenta.setEnvioIdUbigeo(datos.idUbigeo());
+            }
+            String estadoInicial = "DELIVERY".equals(request.tipoEntrega())
+                ? "LISTO_DESPACHO"
+                : "LISTO_PARA_RECOGER";
+            pedidoVenta.setEstado(estadoEnvioRepository.findByCodigo(estadoInicial)
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró el estado inicial de la entrega")));
+            pedidoVenta.setDespachado(false);
+            pedidoRepository.saveAndFlush(pedidoVenta);
+        }
         stockBajoEventPublisher.notificarCrucesVentaPresencial(
             stockBajoAntes,
             resultado.pedidoId(),
@@ -493,9 +524,59 @@ public class PedidoService {
     }
 
     @Transactional(readOnly = true)
+    public ClienteVentaResponse buscarClienteVenta(String tipoDocumento, String numeroDocumento) {
+        if (!List.of("ADMIN", "VENDEDOR").contains(rolActual())) {
+            throw new ForbiddenException("Solo VENDEDOR o ADMIN pueden buscar clientes para una venta");
+        }
+        return clienteRepository.findByTipoDocumentoAndNumeroDocumento(tipoDocumento, numeroDocumento)
+            .filter(Cliente::getActivo)
+            .map(cliente -> new ClienteVentaResponse(
+                cliente.getTipoDocumento(),
+                cliente.getNumeroDocumento(),
+                cliente.getNombres(),
+                cliente.getApellidos(),
+                cliente.getTelefono(),
+                cliente.getDepartamento(),
+                cliente.getProvincia(),
+                cliente.getDistrito(),
+                cliente.getDireccion(),
+                cliente.getCodigoPostal(),
+                cliente.getReferencia(),
+                cliente.getIdUbigeo()
+            ))
+            .orElseThrow(() -> new ResourceNotFoundException("No se encontró un cliente con ese documento"));
+    }
+
+    private Cliente guardarClienteVenta(DatosClienteVentaRequest datos, String tipoEntrega) {
+        String tipoDocumento = datos.tipoDocumento().trim();
+        String numeroDocumento = datos.numeroDocumento().trim();
+        Cliente cliente = clienteRepository.findByTipoDocumentoAndNumeroDocumento(tipoDocumento, numeroDocumento)
+            .orElseGet(Cliente::new);
+        if (Boolean.FALSE.equals(cliente.getActivo())) {
+            throw new BusinessException("El cliente asociado al documento está inactivo");
+        }
+        cliente.setTipoDocumento(tipoDocumento);
+        cliente.setNumeroDocumento(numeroDocumento);
+        cliente.setNombres(datos.nombres().trim());
+        cliente.setApellidos(datos.apellidos().trim());
+        cliente.setTelefono(datos.telefono().trim());
+        if ("DELIVERY".equals(tipoEntrega)) {
+            cliente.setDepartamento(datos.departamento().trim());
+            cliente.setProvincia(datos.provincia().trim());
+            cliente.setDistrito(datos.distrito().trim());
+            cliente.setDireccion(datos.direccion().trim());
+            cliente.setCodigoPostal(datos.codigoPostal().trim());
+            cliente.setReferencia(datos.referencia().trim());
+            cliente.setIdUbigeo(datos.idUbigeo());
+        }
+        if (cliente.getActivo() == null) cliente.setActivo(true);
+        return clienteRepository.saveAndFlush(cliente);
+    }
+
+    @Transactional(readOnly = true)
     public List<PedidoResponse> listarMisPedidos() {
         Cliente cliente = clienteAutenticado();
-        return toResponses(pedidoRepository.findByCliente_IdOrderByCreatedAtDesc(cliente.getId()));
+        return cargarRespuestasCompletas(pedidoRepository.findByCliente_IdOrderByCreatedAtDesc(cliente.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -504,14 +585,18 @@ public class PedidoService {
         if ("CLIENTE".equals(rol)) {
             return listarMisPedidos();
         }
+        if ("VENDEDOR".equals(rol)) {
+            Usuario vendedor = usuarioInternoAutenticado();
+            return cargarRespuestasCompletas(pedidoRepository.findByVendedor_IdOrderByCreatedAtDesc(vendedor.getId()));
+        }
         if ("DELIVERY".equals(rol)) {
             Usuario delivery = usuarioInternoAutenticado();
-            return toResponses(pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
+            return cargarRespuestasCompletas(pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
                 delivery.getId(),
                 List.of("LISTO_DESPACHO", "EN_RUTA", "EN_CAMINO")
             ));
         }
-        return toResponses(pedidoRepository.findAllByOrderByCreatedAtDesc());
+        return cargarRespuestasCompletas(pedidoRepository.findAllByOrderByCreatedAtDesc());
     }
 
     @Transactional(readOnly = true)
@@ -521,10 +606,10 @@ public class PedidoService {
             throw new ForbiddenException("Solo ADMIN o DELIVERY pueden consultar el historial de pedidos");
         }
         if ("ADMIN".equals(rol)) {
-            return toResponses(pedidoRepository.findAllByOrderByCreatedAtDesc());
+            return cargarRespuestasCompletas(pedidoRepository.findAllByOrderByCreatedAtDesc());
         }
         Usuario delivery = usuarioInternoAutenticado();
-        return toResponses(pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
+        return cargarRespuestasCompletas(pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
             delivery.getId(),
             List.of("COMPLETADA", "NO_ENTREGADA")
         ));
@@ -541,20 +626,8 @@ public class PedidoService {
             validarAccesoLectura(pedido);
         }
         return pedidoRepository.findHistorialEstados(pedidoId).stream()
-            .map(this::toHistorialEstadoResponse)
+            .map(pedidoMapper::toHistory)
             .toList();
-    }
-
-    private PedidoEstadoHistorialResponse toHistorialEstadoResponse(PedidoEstadoHistorialProjection event) {
-        return new PedidoEstadoHistorialResponse(
-            event.getId(),
-            event.getEstadoAnteriorCodigo(),
-            event.getEstadoCodigo(),
-            event.getAccion(),
-            event.getUsuarioId(),
-            event.getUsuarioNombre(),
-            event.getCreadoEn()
-        );
     }
 
     @Transactional(readOnly = true)
@@ -562,7 +635,7 @@ public class PedidoService {
         if (!List.of("ADMIN", "JEFE_LOGISTICA", "LOGISTICA").contains(rolActual())) {
             throw new ForbiddenException("Solo ADMIN o LOGISTICA pueden consultar la bandeja logística");
         }
-        return toResponses(pedidoRepository.findByEstado_CodigoInOrderByCreatedAtDesc(List.of(
+        return cargarRespuestasCompletas(pedidoRepository.findByEstado_CodigoInOrderByCreatedAtDesc(List.of(
             "PREPARACION",
             "LISTO_DESPACHO",
             "LISTO_PARA_RECOGER",
@@ -609,6 +682,9 @@ public class PedidoService {
         if ("CLIENTE".equals(rol)) {
             Cliente cliente = clienteAutenticado();
             pagina = pedidoRepository.findByCliente_IdOrderByCreatedAtDesc(cliente.getId(), pageable);
+        } else if ("VENDEDOR".equals(rol)) {
+            Usuario vendedor = usuarioInternoAutenticado();
+            pagina = pedidoRepository.findByVendedor_IdOrderByCreatedAtDesc(vendedor.getId(), pageable);
         } else if ("DELIVERY".equals(rol)) {
             Usuario delivery = usuarioInternoAutenticado();
             pagina = pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
@@ -619,8 +695,50 @@ public class PedidoService {
         } else {
             pagina = pedidoRepository.findAllByOrderByCreatedAtDesc(pageable);
         }
+        return toPaginaResponse(pagina);
+    }
+
+    @Transactional(readOnly = true)
+    public PedidoPaginaResponse listarPaginaHistorialDelivery(Pageable pageable) {
+        String rol = rolActual();
+        if (!List.of("ADMIN", "JEFE_LOGISTICA", "DELIVERY").contains(rol)) {
+            throw new ForbiddenException("Solo ADMIN o DELIVERY pueden consultar el historial de pedidos");
+        }
+        Page<Pedido> pagina;
+        if ("ADMIN".equals(rol)) {
+            pagina = pedidoRepository.findAllByOrderByCreatedAtDesc(pageable);
+        } else {
+            Usuario delivery = usuarioInternoAutenticado();
+            pagina = pedidoRepository.findByDelivery_IdAndEstado_CodigoInOrderByCreatedAtDesc(
+                delivery.getId(),
+                List.of("COMPLETADA", "NO_ENTREGADA"),
+                pageable
+            );
+        }
+        return toPaginaResponse(pagina);
+    }
+
+    @Transactional(readOnly = true)
+    public PedidoPaginaResponse listarPaginaBandejaLogistica(Pageable pageable) {
+        if (!List.of("ADMIN", "JEFE_LOGISTICA", "LOGISTICA").contains(rolActual())) {
+            throw new ForbiddenException("Solo ADMIN o LOGISTICA pueden consultar la bandeja logística");
+        }
+        Page<Pedido> pagina = pedidoRepository.findByEstado_CodigoInOrderByCreatedAtDesc(List.of(
+            "PREPARACION",
+            "LISTO_DESPACHO",
+            "LISTO_PARA_RECOGER",
+            "EN_RUTA",
+            "EN_CAMINO",
+            "NO_ENTREGADA"
+        ), pageable);
+        return toPaginaResponse(pagina);
+    }
+
+    private PedidoPaginaResponse toPaginaResponse(Page<Pedido> pagina) {
         return new PedidoPaginaResponse(
-            pagina.getContent().stream().map(this::toResumen).toList(),
+            pagina.getContent().stream()
+                .map(pedido -> pedidoMapper.toSummary(pedido, nombreEstadoVisible(pedido)))
+                .toList(),
             pagina.getNumber(),
             pagina.getSize(),
             pagina.getTotalElements(),
@@ -635,14 +753,14 @@ public class PedidoService {
     public PedidoResponse obtener(UUID pedidoId) {
         Pedido pedido = pedido(pedidoId);
         validarAccesoLectura(pedido);
-        return toResponse(pedido);
+        return cargarRespuestaCompleta(pedido);
     }
 
     @Transactional(readOnly = true)
     public PedidoComprobanteResponse obtenerDatosComprobante(UUID pedidoId) {
         Pedido pedido = pedido(pedidoId);
         validarAccesoLectura(pedido);
-        PedidoResponse detallePedido = toResponse(pedido);
+        PedidoResponse detallePedido = cargarRespuestaCompleta(pedido);
         PagoResponse pagoAprobado = detallePedido.pagos().stream()
             .filter(pago -> "APROBADO".equals(pago.estado()))
             .reduce((primero, siguiente) -> siguiente)
@@ -723,7 +841,7 @@ public class PedidoService {
             actor.getId(),
             "CAMBIAR_ESTADO"
         ));
-        return toResponse(pedido);
+        return cargarRespuestaCompleta(pedido);
     }
 
     public PedidoResponse cancelarPedidoCliente(UUID pedidoId) {
@@ -758,7 +876,7 @@ public class PedidoService {
             null,
             "CANCELAR_PEDIDO"
         ));
-        return toResponse(pedido);
+        return cargarRespuestaCompleta(pedido);
     }
 
     public PedidoResponse asignarDelivery(UUID pedidoId, AsignarDeliveryRequest request) {
@@ -801,7 +919,7 @@ public class PedidoService {
             actor.getId(),
             "ASIGNAR_DELIVERY"
         ));
-        return toResponse(pedido);
+        return cargarRespuestaCompleta(pedido);
     }
 
     private void validarPermisoCambioEstado(Pedido pedido, String destino, String rol, Usuario actor) {
@@ -840,6 +958,11 @@ public class PedidoService {
         } else if ("DELIVERY".equals(rol)) {
             Usuario delivery = usuarioInternoAutenticado();
             if (pedido.getDelivery() == null || !pedido.getDelivery().getId().equals(delivery.getId())) {
+                throw new ResourceNotFoundException("Pedido no encontrado");
+            }
+        } else if ("VENDEDOR".equals(rol)) {
+            Usuario vendedor = usuarioInternoAutenticado();
+            if (pedido.getVendedor() == null || !pedido.getVendedor().getId().equals(vendedor.getId())) {
                 throw new ResourceNotFoundException("Pedido no encontrado");
             }
         }
@@ -898,11 +1021,11 @@ public class PedidoService {
         }
     }
 
-    private PedidoResponse toResponse(Pedido pedido) {
-        return toResponses(List.of(pedido)).get(0);
+    private PedidoResponse cargarRespuestaCompleta(Pedido pedido) {
+        return cargarRespuestasCompletas(List.of(pedido)).get(0);
     }
 
-    private List<PedidoResponse> toResponses(List<Pedido> pedidos) {
+    private List<PedidoResponse> cargarRespuestasCompletas(List<Pedido> pedidos) {
         if (pedidos.isEmpty()) {
             return List.of();
         }
@@ -917,77 +1040,13 @@ public class PedidoService {
                 .collect(Collectors.groupingBy(pago -> pago.getPedido().getId()));
 
         return pedidos.stream()
-            .map(pedido -> toResponse(
+            .map(pedido -> pedidoMapper.toResponse(
                 pedido,
                 detallesPorPedido.getOrDefault(pedido.getId(), List.of()),
-                pagosPorPedido.getOrDefault(pedido.getId(), List.of())
+                pagosPorPedido.getOrDefault(pedido.getId(), List.of()),
+                nombreEstadoVisible(pedido)
             ))
             .toList();
-    }
-
-    private PedidoResponse toResponse(Pedido pedido, List<DetallePedido> lineas, List<Pago> pagosDelPedido) {
-        List<DetallePedidoResponse> detalles = lineas.stream()
-            .map(detalle -> new DetallePedidoResponse(
-                detalle.getId(),
-                detalle.getProducto() == null ? null : detalle.getProducto().getId(),
-                detalle.getProductoCodigo(),
-                detalle.getProductoNombre(),
-                detalle.getCategoriaNombre(),
-                detalle.getProductoImagenUrl(),
-                detalle.getCantidad(),
-                detalle.getPrecioUnitario(),
-                detalle.getDescuentoPorcentaje(),
-                detalle.getSubtotal(),
-                detalle.getEstadoStock()
-            ))
-            .toList();
-        List<PagoResponse> pagos = pagosDelPedido.stream()
-            .map(pago -> new PagoResponse(
-                pago.getId(),
-                pago.getCodigo(),
-                pago.getMetodoPago(),
-                pago.getEstado(),
-                pago.getMonto(),
-                pago.getFechaPago()
-            ))
-            .toList();
-        return new PedidoResponse(
-            pedido.getId(),
-            pedido.getCodigo(),
-            pedido.getCanal(),
-            pedido.getTipoEntrega(),
-            pedido.getEstado().getCodigo(),
-            nombreEstadoVisible(pedido),
-            pedido.getLogistica() == null ? null : pedido.getLogistica().getId(),
-            pedido.getLogisticaNombre(),
-            pedido.getDelivery() == null ? null : pedido.getDelivery().getId(),
-            pedido.getDeliveryNombre(),
-            pedido.getTipoComprobante(),
-            pedido.getSerie(),
-            pedido.getNumeroComprobante(),
-            pedido.getSubtotal(),
-            pedido.getDescuentoCupon(),
-            pedido.getCostoEnvio(),
-            pedido.getIgv(),
-            pedido.getTotal(),
-            pedido.getTieneReserva(),
-            pedido.getDespachado(),
-            pedido.getCreatedAt(),
-            detalles,
-            pagos,
-            new DatosEntregaResponse(
-                pedido.getClienteNombre(),
-                pedido.getClienteTelefono(),
-                pedido.getEnvioDepartamento(),
-                pedido.getEnvioProvincia(),
-                pedido.getEnvioDistrito(),
-                pedido.getEnvioDireccion(),
-                pedido.getEnvioCodigoPostal(),
-                pedido.getEnvioReferencia(),
-                pedido.getSucursalNombre(),
-                pedido.getSucursalDireccion()
-            )
-        );
     }
 
     private String nombreEstadoVisible(Pedido pedido) {
@@ -1007,34 +1066,6 @@ public class PedidoService {
             case "CANCELADO" -> "Cancelado";
             default -> pedido.getEstado().getNombre();
         };
-    }
-
-    private PedidoResumenResponse toResumen(Pedido pedido) {
-        return new PedidoResumenResponse(
-            pedido.getId(),
-            pedido.getCodigo(),
-            pedido.getCanal(),
-            pedido.getTipoEntrega(),
-            pedido.getEstado().getCodigo(),
-            nombreEstadoVisible(pedido),
-            pedido.getTipoComprobante(),
-            pedido.getSerie(),
-            pedido.getNumeroComprobante(),
-            pedido.getTotal(),
-            pedido.getCreatedAt(),
-            new DatosEntregaResponse(
-                pedido.getClienteNombre(),
-                pedido.getClienteTelefono(),
-                pedido.getEnvioDepartamento(),
-                pedido.getEnvioProvincia(),
-                pedido.getEnvioDistrito(),
-                pedido.getEnvioDireccion(),
-                pedido.getEnvioCodigoPostal(),
-                pedido.getEnvioReferencia(),
-                pedido.getSucursalNombre(),
-                pedido.getSucursalDireccion()
-            )
-        );
     }
 
     @FunctionalInterface

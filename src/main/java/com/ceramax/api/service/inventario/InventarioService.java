@@ -16,25 +16,20 @@ import com.ceramax.api.dto.response.TrasladoInventarioResponse;
 import com.ceramax.api.exception.BusinessException;
 import com.ceramax.api.exception.ForbiddenException;
 import com.ceramax.api.exception.ResourceNotFoundException;
+import com.ceramax.api.mappers.inventario.InventarioMapper;
 import com.ceramax.api.model.acceso.Usuario;
 import com.ceramax.api.observer.StockBajoEventPublisher;
 import com.ceramax.api.observer.event.TrasladoRecibidoEvent;
 import com.ceramax.api.repository.acceso.UsuarioRepository;
-import com.ceramax.api.repository.inventario.AjusteInventarioProjection;
 import com.ceramax.api.repository.inventario.InventarioConsultaRepository;
 import com.ceramax.api.repository.inventario.InventarioOperacionRepository;
-import com.ceramax.api.repository.inventario.InventarioProjection;
-import com.ceramax.api.repository.inventario.MovimientoInventarioProjection;
-import com.ceramax.api.repository.inventario.ReservaInventarioProjection;
-import com.ceramax.api.repository.inventario.TrasladoInventarioProjection;
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -50,29 +45,32 @@ public class InventarioService {
     private final UsuarioRepository usuarioRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final StockBajoEventPublisher stockBajoEventPublisher;
+    private final InventarioMapper inventarioMapper;
 
     public InventarioService(
         InventarioConsultaRepository consultaRepository,
         InventarioOperacionRepository operacionRepository,
         UsuarioRepository usuarioRepository,
         ApplicationEventPublisher eventPublisher,
-        StockBajoEventPublisher stockBajoEventPublisher
+        StockBajoEventPublisher stockBajoEventPublisher,
+        InventarioMapper inventarioMapper
     ) {
         this.consultaRepository = consultaRepository;
         this.operacionRepository = operacionRepository;
         this.usuarioRepository = usuarioRepository;
         this.eventPublisher = eventPublisher;
         this.stockBajoEventPublisher = stockBajoEventPublisher;
+        this.inventarioMapper = inventarioMapper;
     }
 
     @Transactional(readOnly = true)
-    public List<InventarioResponse> listarInventario() {
-        return consultaRepository.listarInventario().stream().map(this::toInventario).toList();
+    public Page<InventarioResponse> listarInventario(Pageable pageable) {
+        return consultaRepository.listarInventario(pageable).map(inventarioMapper::toInventario);
     }
 
     @Transactional(readOnly = true)
-    public List<StockDisponibleResponse> listarStockDisponible() {
-        return consultaRepository.listarStockDisponible().stream().map(this::toStockDisponible).toList();
+    public Page<StockDisponibleResponse> listarStockDisponible(Pageable pageable) {
+        return consultaRepository.listarStockDisponible(pageable).map(inventarioMapper::toStockDisponible);
     }
 
     @Transactional(readOnly = true)
@@ -85,23 +83,23 @@ public class InventarioService {
     }
 
     @Transactional(readOnly = true)
-    public List<MovimientoInventarioResponse> listarMovimientos() {
-        return consultaRepository.listarMovimientos().stream().map(this::toMovimiento).toList();
+    public Page<MovimientoInventarioResponse> listarMovimientos(Pageable pageable) {
+        return consultaRepository.listarMovimientos(pageable).map(inventarioMapper::toMovimiento);
     }
 
     @Transactional(readOnly = true)
-    public List<TrasladoInventarioResponse> listarTrasladosEnTransito() {
-        return consultaRepository.listarTrasladosEnTransito().stream().map(this::toTraslado).toList();
+    public Page<TrasladoInventarioResponse> listarTrasladosEnTransito(Pageable pageable) {
+        return consultaRepository.listarTrasladosEnTransito(pageable).map(inventarioMapper::toTraslado);
     }
 
     @Transactional(readOnly = true)
-    public List<ReservaInventarioResponse> listarReservasActivas() {
-        return consultaRepository.listarReservasActivas().stream().map(this::toReserva).toList();
+    public Page<ReservaInventarioResponse> listarReservasActivas(Pageable pageable) {
+        return consultaRepository.listarReservasActivas(pageable).map(inventarioMapper::toReserva);
     }
 
     @Transactional(readOnly = true)
-    public List<AjusteInventarioResponse> listarAjustes() {
-        return consultaRepository.listarAjustes().stream().map(this::toAjuste).toList();
+    public Page<AjusteInventarioResponse> listarAjustes(Pageable pageable) {
+        return consultaRepository.listarAjustes(pageable).map(inventarioMapper::toAjuste);
     }
 
     public OperacionInventarioResponse registrarEntrada(EntradaInventarioRequest request) {
@@ -141,15 +139,15 @@ public class InventarioService {
         return response;
     }
 
-    public List<SolicitudEntradaResponse> listarSolicitudesEntrada() {
+    public Page<SolicitudEntradaResponse> listarSolicitudesEntrada(Pageable pageable) {
         String rol = usuarioAutenticado().getRol() != null ? usuarioAutenticado().getRol().getCodigo() : "";
         if ("LOGISTICA".equals(rol)) {
-            return operacionRepository.listarSolicitudesEntrada(usuarioAutenticado().getId());
+            return operacionRepository.listarSolicitudesEntrada(usuarioAutenticado().getId(), pageable);
         }
         if (!List.of("ADMIN", "JEFE_LOGISTICA").contains(rol)) {
             throw new ForbiddenException("No tienes permiso para ver solicitudes de entrada");
         }
-        return operacionRepository.listarSolicitudesEntradaPendientes();
+        return operacionRepository.listarSolicitudesEntradaPendientes(pageable);
     }
 
     public OperacionInventarioResponse aprobarSolicitudEntrada(UUID solicitudId) {
@@ -325,127 +323,6 @@ public class InventarioService {
             throw new BusinessException("La operación de inventario no pudo completarse");
         }
         return new OperacionInventarioResponse(true);
-    }
-
-    private InventarioResponse toInventario(InventarioProjection row) {
-        return new InventarioResponse(
-            row.getIdSucursal(),
-            row.getSucursalNombre(),
-            row.getIdAlmacen(),
-            row.getAlmacenCodigo(),
-            row.getAlmacenNombre(),
-            row.getIdProducto(),
-            row.getProductoCodigo(),
-            row.getProductoNombre(),
-            row.getCategoriaNombre(),
-            row.getStockFisico(),
-            row.getStockReservado(),
-            row.getStockDisponible(),
-            row.getStockMinimo(),
-            row.getStockBajo()
-        );
-    }
-
-    private StockDisponibleResponse toStockDisponible(InventarioProjection row) {
-        return new StockDisponibleResponse(
-            row.getIdSucursal(),
-            row.getSucursalNombre(),
-            row.getIdAlmacen(),
-            row.getAlmacenCodigo(),
-            row.getAlmacenNombre(),
-            row.getIdProducto(),
-            row.getProductoCodigo(),
-            row.getProductoNombre(),
-            row.getCategoriaNombre(),
-            row.getStockFisico(),
-            row.getStockReservado(),
-            row.getStockDisponible()
-        );
-    }
-
-    private MovimientoInventarioResponse toMovimiento(MovimientoInventarioProjection row) {
-        return new MovimientoInventarioResponse(
-            row.getId(),
-            row.getCodigo(),
-            toOffsetDateTime(row.getCreatedAt()),
-            row.getIdAlmacen(),
-            row.getAlmacenNombre(),
-            row.getIdProducto(),
-            row.getProductoCodigo(),
-            row.getProductoNombre(),
-            row.getIdUsuario(),
-            row.getUsuarioNombre(),
-            row.getIdPedido(),
-            row.getIdTraslado(),
-            row.getTipo(),
-            row.getMotivo(),
-            row.getCantidad(),
-            row.getStockResultante(),
-            row.getObservacion()
-        );
-    }
-
-    private TrasladoInventarioResponse toTraslado(TrasladoInventarioProjection row) {
-        return new TrasladoInventarioResponse(
-            row.getId(),
-            row.getCodigo(),
-            row.getTipoTraslado(),
-            row.getEstado(),
-            row.getIdAlmacenOrigen(),
-            row.getAlmacenOrigenNombre(),
-            row.getIdAlmacenDestino(),
-            row.getAlmacenDestinoNombre(),
-            row.getIdProducto(),
-            row.getProductoCodigo(),
-            row.getProductoNombre(),
-            row.getCantidad(),
-            row.getIdPedido(),
-            row.getPedidoCodigo(),
-            toOffsetDateTime(row.getFechaInicio()),
-            row.getDiasTransito()
-        );
-    }
-
-    private AjusteInventarioResponse toAjuste(AjusteInventarioProjection row) {
-        return new AjusteInventarioResponse(
-            row.getId(),
-            row.getCodigo(),
-            row.getIdUsuarioEjecutor(),
-            row.getUsuarioEjecutor(),
-            row.getIdAlmacen(),
-            row.getAlmacenNombre(),
-            row.getIdProducto(),
-            row.getProductoCodigo(),
-            row.getProductoNombre(),
-            row.getStockAnterior(),
-            row.getCantidadAjustada(),
-            row.getStockNuevo(),
-            row.getMotivo(),
-            row.getObservacion(),
-            toOffsetDateTime(row.getCreatedAt())
-        );
-    }
-
-    private ReservaInventarioResponse toReserva(ReservaInventarioProjection row) {
-        return new ReservaInventarioResponse(
-            row.getIdReserva(),
-            row.getIdPedido(),
-            row.getPedidoCodigo(),
-            row.getIdDetallePedido(),
-            row.getIdAlmacen(),
-            row.getAlmacenNombre(),
-            row.getIdProducto(),
-            row.getCantidad(),
-            row.getEstado(),
-            row.getTipoEntrega(),
-            row.getClienteNombre(),
-            toOffsetDateTime(row.getFechaPedido()),
-            toOffsetDateTime(row.getFechaReserva())
-        );
-    }
-
-    private OffsetDateTime toOffsetDateTime(Instant value) {
-        return value == null ? null : value.atOffset(ZoneOffset.UTC);
     }
 
     @FunctionalInterface

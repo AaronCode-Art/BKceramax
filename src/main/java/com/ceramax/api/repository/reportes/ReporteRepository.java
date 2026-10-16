@@ -100,6 +100,31 @@ public class ReporteRepository {
         );
     }
 
+    public List<ResumenPagos> listarResumenPagos(OffsetDateTime desde, OffsetDateTime hastaExclusivo) {
+        return jdbcTemplate.query(
+            """
+                SELECT pg.metodo_pago,
+                       pg.estado,
+                       COUNT(*)::bigint AS cantidad_pagos,
+                       COALESCE(SUM(pg.monto), 0)::numeric AS monto_total
+                FROM pago pg
+                WHERE COALESCE(pg.fecha_pago, pg.created_at) >= ?
+                  AND COALESCE(pg.fecha_pago, pg.created_at) < ?
+                  AND pg.proveedor IS DISTINCT FROM 'SIMULADO'
+                GROUP BY pg.metodo_pago, pg.estado
+                ORDER BY pg.metodo_pago, pg.estado
+                """,
+            (resultSet, rowNumber) -> new ResumenPagos(
+                resultSet.getString("metodo_pago"),
+                resultSet.getString("estado"),
+                resultSet.getLong("cantidad_pagos"),
+                resultSet.getBigDecimal("monto_total")
+            ),
+            desde,
+            hastaExclusivo
+        );
+    }
+
     public List<InventarioActual> listarInventarioActual() {
         return jdbcTemplate.query(
             SQL_INVENTARIO_ACTUAL,
@@ -148,6 +173,13 @@ public class ReporteRepository {
         String productoNombre,
         Long unidadesVendidas,
         BigDecimal importeVendido
+    ) {}
+
+    public record ResumenPagos(
+        String metodoPago,
+        String estado,
+        Long cantidadPagos,
+        BigDecimal montoTotal
     ) {}
 
     public record InventarioActual(

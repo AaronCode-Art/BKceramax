@@ -1,6 +1,7 @@
 package com.ceramax.api.dto.response;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record ChatResponse(
@@ -15,5 +16,6 @@ public record ChatResponse(
     String asunto,
     String estado,
     OffsetDateTime creadoEn,
-    OffsetDateTime actualizadoEn
+    OffsetDateTime actualizadoEn,
+    List<ChatInternoMiembroResponse> miembros
 ) {}

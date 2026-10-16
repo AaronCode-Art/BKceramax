@@ -17,6 +17,7 @@ public record CrearPedidoWebRequest(
     @Size(max = 60) String envioProvincia,
     @Size(max = 60) String envioDistrito,
     @Size(max = 200) String envioDireccion,
+    @Pattern(regexp = "^$|9[0-9]{8}") String envioTelefono,
     @Size(max = 10) String envioCodigoPostal,
     @Size(max = 250) String envioReferencia,
     @Pattern(regexp = "[0-9]{6}") String envioIdUbigeo,

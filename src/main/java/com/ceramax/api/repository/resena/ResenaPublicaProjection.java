@@ -1,6 +1,6 @@
 package com.ceramax.api.repository.resena;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public interface ResenaPublicaProjection {
@@ -13,5 +13,5 @@ public interface ResenaPublicaProjection {
     UUID getPedidoId();
     Short getCalificacion();
     String getComentario();
-    OffsetDateTime getCreadoEn();
+    Instant getCreadoEn();
 }
