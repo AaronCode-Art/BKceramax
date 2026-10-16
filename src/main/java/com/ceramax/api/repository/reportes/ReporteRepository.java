@@ -51,7 +51,6 @@ public class ReporteRepository {
                 JOIN pago pg ON pg.id_pedido = p.id AND pg.estado = 'APROBADO'
                 WHERE p.created_at >= ?
                   AND p.created_at < ?
-                  AND pg.proveedor IS DISTINCT FROM 'SIMULADO'
                   AND e.codigo <> 'CANCELADO'
                 """,
             (resultSet, rowNumber) -> new ResumenVentas(
@@ -82,7 +81,6 @@ public class ReporteRepository {
                 JOIN pago pg ON pg.id_pedido = p.id AND pg.estado = 'APROBADO'
                 WHERE p.created_at >= ?
                   AND p.created_at < ?
-                  AND pg.proveedor IS DISTINCT FROM 'SIMULADO'
                   AND e.codigo <> 'CANCELADO'
                 GROUP BY d.id_producto, d.producto_codigo, d.producto_nombre
                 ORDER BY unidades_vendidas DESC, d.producto_codigo
@@ -110,7 +108,6 @@ public class ReporteRepository {
                 FROM pago pg
                 WHERE COALESCE(pg.fecha_pago, pg.created_at) >= ?
                   AND COALESCE(pg.fecha_pago, pg.created_at) < ?
-                  AND pg.proveedor IS DISTINCT FROM 'SIMULADO'
                 GROUP BY pg.metodo_pago, pg.estado
                 ORDER BY pg.metodo_pago, pg.estado
                 """,
