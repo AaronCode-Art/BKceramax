@@ -29,19 +29,19 @@ public class CeramaxUserDetailsService implements UserDetailsService {
         if (usuario != null) {
             String role = usuario.getRol() != null ? usuario.getRol().getCodigo() : "USER";
             return User.withUsername(usuario.getEmail())
-                .password(usuario.getPasswordHash())
-                .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + role)))
-                .disabled(!Boolean.TRUE.equals(usuario.getActivo()))
-                .build();
+                    .password(usuario.getPasswordHash())
+                    .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + role)))
+                    .disabled(!Boolean.TRUE.equals(usuario.getActivo()))
+                    .build();
         }
 
         Cliente cliente = clienteRepository.findByEmail(username).orElse(null);
         if (cliente != null) {
             return User.withUsername(cliente.getEmail())
-                .password(cliente.getPasswordHash() == null ? "" : cliente.getPasswordHash())
-                .authorities(List.of(new SimpleGrantedAuthority("ROLE_CLIENTE")))
-                .disabled(!Boolean.TRUE.equals(cliente.getActivo()))
-                .build();
+                    .password(cliente.getPasswordHash() == null ? "" : cliente.getPasswordHash())
+                    .authorities(List.of(new SimpleGrantedAuthority("ROLE_CLIENTE")))
+                    .disabled(!Boolean.TRUE.equals(cliente.getActivo()))
+                    .build();
         }
 
         throw new UsernameNotFoundException("Usuario no encontrado: " + username);
