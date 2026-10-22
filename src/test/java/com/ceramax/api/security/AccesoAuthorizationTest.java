@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -53,6 +54,14 @@ class AccesoAuthorizationTest {
 
     @MockitoBean
     private CuponService cuponService;
+
+    @Test
+    void healthActuatorEsPublicoParaGetYHead() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+            .andExpect(status().isOk());
+        mockMvc.perform(head("/actuator/health"))
+            .andExpect(status().isOk());
+    }
 
     @Test
     @WithMockUser(roles = "JEFE_LOGISTICA")
