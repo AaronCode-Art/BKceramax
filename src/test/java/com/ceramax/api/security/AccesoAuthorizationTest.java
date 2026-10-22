@@ -18,6 +18,7 @@ import com.ceramax.api.dto.request.BuscarClienteRegistroRequest;
 import com.ceramax.api.dto.request.UsuarioRequest;
 import com.ceramax.api.dto.response.ClienteResponse;
 import com.ceramax.api.service.catalogo.ProductoService;
+import com.ceramax.api.service.venta.CuponService;
 import com.ceramax.api.service.acceso.ClienteService;
 import com.ceramax.api.service.acceso.UsuarioService;
 import java.util.List;
@@ -49,6 +50,32 @@ class AccesoAuthorizationTest {
 
     @MockitoBean
     private ProductoService productoService;
+
+    @MockitoBean
+    private CuponService cuponService;
+
+    @Test
+    @WithMockUser(roles = "JEFE_LOGISTICA")
+    void jefeDeLogisticaPuedeAdministrarCupones() throws Exception {
+        when(cuponService.listar()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/cupones")
+                .with(user("jefe").roles("JEFE_LOGISTICA")))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "LOGISTICA")
+    void logisticaNoPuedeAdministrarCupones() throws Exception {
+        mockMvc.perform(get("/api/v1/cupones"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anunciosDeCuponesSonPublicos() throws Exception {
+        mockMvc.perform(get("/api/v1/public/cupones/anuncios"))
+            .andExpect(status().isOk());
+    }
 
     @Test
     @WithMockUser(roles = "LOGISTICA")
@@ -106,7 +133,7 @@ class AccesoAuthorizationTest {
                       "nombres": "Test",
                       "apellidos": "Cliente",
                       "email": "test@example.test",
-                      "password": "password",
+                      "password": "Abcdef908172!",
                       "telefono": "999123456",
                       "departamento": "Lima",
                       "provincia": "Lima",
@@ -177,7 +204,7 @@ class AccesoAuthorizationTest {
                       "nombres": "Test",
                       "apellidos": "Cliente",
                       "email": "test@example.test",
-                      "password": "password",
+                      "password": "Abcdef908172!",
                       "telefono": "999123456",
                       "departamento": "Lima",
                       "provincia": "Lima",

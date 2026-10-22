@@ -70,6 +70,7 @@ class PedidoServiceDeliveryTest {
         mock(CarritoService.class),
         ventaOperacionRepository,
         mock(PedidoFactory.class),
+        mock(CuponService.class),
         mock(ComprobanteFactory.class),
         mock(ApplicationEventPublisher.class),
         mock(EntityManager.class),

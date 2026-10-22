@@ -24,6 +24,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final String AUTH_STAFF_PATH = "/api/auth/staff/login";
     private static final String AUTH_CLIENT_PATH = "/api/auth/cliente/login";
+    private static final String CLIENT_PASSWORD_RECOVERY_PATH = "/api/auth/cliente/recuperacion";
+    private static final String CLIENT_PASSWORD_RESET_PATH = "/api/auth/cliente/restablecer-contrasena";
     private static final String CLIENT_REGISTRATION_PATH = "/api/v1/clientes/registro";
     private static final String CLIENTS_PATH = "/api/v1/clientes";
     private static final String CHECKOUT_PATH = "/api/v1/pedidos/web/checkout";
@@ -108,6 +110,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         if ("POST".equals(method) && (AUTH_STAFF_PATH.equals(path) || AUTH_CLIENT_PATH.equals(path))) {
             return new Policy("auth", authCapacity, false);
+        }
+        if ("POST".equals(method)
+            && (CLIENT_PASSWORD_RECOVERY_PATH.equals(path) || CLIENT_PASSWORD_RESET_PATH.equals(path))) {
+            return new Policy("client-password-recovery", Math.min(authCapacity, 5), false);
         }
         if ("POST".equals(method) && (
             isPathOrChild(path, CLIENT_REGISTRATION_PATH) || CLIENTS_PATH.equals(path)

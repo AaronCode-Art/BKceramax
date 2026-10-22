@@ -65,6 +65,7 @@ public class PedidoMapper {
             pedido.getRazonSocial(),
             pedido.getSubtotal(),
             pedido.getDescuentoCupon(),
+            pedido.getCodigoCupon(),
             pedido.getCostoEnvio(),
             pedido.getIgv(),
             pedido.getTotal(),

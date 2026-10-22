@@ -49,7 +49,8 @@ class PedidoFactoryTest {
             null,
             "SIMULADO",
             "TARJETA",
-            List.of(new DetallePedidoRequest(UUID.randomUUID(), 2))
+            List.of(new DetallePedidoRequest(UUID.randomUUID(), 2)),
+            "promo10"
         );
         var pedido = pedidoFactory.crearPedidoWeb(
             request,
@@ -87,7 +88,8 @@ class PedidoFactoryTest {
             null,
             "SIMULADO",
             "YAPE",
-            List.of(new DetallePedidoRequest(UUID.randomUUID(), 1))
+            List.of(new DetallePedidoRequest(UUID.randomUUID(), 1)),
+            null
         );
 
         assertThrows(

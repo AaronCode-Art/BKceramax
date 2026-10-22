@@ -72,6 +72,9 @@ public class PedidoFactory {
         pedido.setCostoEnvio(costoEnvio);
         pedido.setSubtotal(subtotal);
         pedido.setDescuentoCupon(BigDecimal.ZERO);
+        pedido.setCodigoCupon(request.codigoCupon() == null || request.codigoCupon().isBlank()
+            ? null
+            : request.codigoCupon().trim().toUpperCase(java.util.Locale.ROOT));
         pedido.setIgv(igv);
         pedido.setTotal(total);
         pedido.setTipoComprobante(comprobante.tipo());

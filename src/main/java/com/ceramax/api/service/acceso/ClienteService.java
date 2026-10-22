@@ -2,6 +2,7 @@ package com.ceramax.api.service.acceso;
 
 import com.ceramax.api.dto.request.ClienteRequest;
 import com.ceramax.api.dto.request.ClienteUpdateRequest;
+import com.ceramax.api.dto.request.ContrasenaClienteValidator;
 import com.ceramax.api.dto.request.ActualizarDatosEntregaClienteRequest;
 import com.ceramax.api.dto.request.BuscarClienteRegistroRequest;
 import com.ceramax.api.dto.response.ClienteResponse;
@@ -70,8 +71,10 @@ public class ClienteService {
             .orElseThrow(() -> new ResourceNotFoundException(
                 "No se encontraron datos activos para este documento sin una cuenta registrada."
             ));
-        if (request.password() == null || request.password().length() < 8) {
-            throw new ConflictException("La contraseña debe tener al menos 8 caracteres.");
+        if (!ContrasenaClienteValidator.esValida(request.password())) {
+            throw new ConflictException(
+                "La contraseña necesita 6 dígitos, una mayúscula y un símbolo, sin secuencias numéricas consecutivas."
+            );
         }
 
         String email = request.email().trim().toLowerCase(Locale.ROOT);

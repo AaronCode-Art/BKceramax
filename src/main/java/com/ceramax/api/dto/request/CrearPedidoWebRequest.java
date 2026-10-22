@@ -23,5 +23,6 @@ public record CrearPedidoWebRequest(
     @Pattern(regexp = "[0-9]{6}") String envioIdUbigeo,
     @NotBlank @Pattern(regexp = "SIMULADO") String metodoPago,
     @NotBlank @Pattern(regexp = "YAPE|PLIN|TARJETA") String medioPagoSimulado,
-    @NotNull @NotEmpty List<@Valid DetallePedidoRequest> detalles
+    @NotNull @NotEmpty List<@Valid DetallePedidoRequest> detalles,
+    @Pattern(regexp = "^$|[A-Za-z0-9_-]{3,30}") String codigoCupon
 ) {}

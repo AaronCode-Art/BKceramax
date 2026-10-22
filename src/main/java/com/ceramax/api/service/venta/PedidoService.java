@@ -84,6 +84,7 @@ public class PedidoService {
     private final CarritoService carritoService;
     private final VentaOperacionRepository ventaOperacionRepository;
     private final PedidoFactory pedidoFactory;
+    private final CuponService cuponService;
     private final ComprobanteFactory comprobanteFactory;
     private final ApplicationEventPublisher eventPublisher;
     private final EntityManager entityManager;
@@ -103,6 +104,7 @@ public class PedidoService {
         CarritoService carritoService,
         VentaOperacionRepository ventaOperacionRepository,
         PedidoFactory pedidoFactory,
+        CuponService cuponService,
         ComprobanteFactory comprobanteFactory,
         ApplicationEventPublisher eventPublisher,
         EntityManager entityManager,
@@ -121,6 +123,7 @@ public class PedidoService {
         this.carritoService = carritoService;
         this.ventaOperacionRepository = ventaOperacionRepository;
         this.pedidoFactory = pedidoFactory;
+        this.cuponService = cuponService;
         this.comprobanteFactory = comprobanteFactory;
         this.eventPublisher = eventPublisher;
         this.entityManager = entityManager;
@@ -158,7 +161,7 @@ public class PedidoService {
 
     @Transactional(readOnly = true)
     public CheckoutCotizacionResponse cotizarCheckoutWeb(CotizarCheckoutWebRequest request) {
-        clienteAutenticado();
+        Cliente cliente = clienteAutenticado();
         List<DetallePedidoRequest> detallesCarrito = carritoService.obtener()
             .stream()
             .map(item -> new DetallePedidoRequest(item.product().id(), item.quantity()))
@@ -172,7 +175,13 @@ public class PedidoService {
                 .multiply(BigDecimal.valueOf(linea.cantidad())))
             .reduce(BigDecimal.ZERO, BigDecimal::add)
             .setScale(2, RoundingMode.HALF_UP);
-        return calcularCotizacion(request.tipoEntrega(), subtotal);
+        return calcularCotizacion(
+            request.tipoEntrega(),
+            subtotal,
+            request.codigoCupon(),
+            false,
+            cliente.getId()
+        );
     }
 
     public PedidoResponse confirmarCheckoutWebSimulado(CrearPedidoWebRequest request) {
@@ -344,7 +353,13 @@ public class PedidoService {
             detalles.add(detalle);
         }
 
-        CheckoutCotizacionResponse cotizacion = calcularCotizacion(request.tipoEntrega(), subtotal);
+        CheckoutCotizacionResponse cotizacion = calcularCotizacion(
+            request.tipoEntrega(),
+            subtotal,
+            request.codigoCupon(),
+            request.codigoCupon() != null && !request.codigoCupon().isBlank(),
+            cliente.getId()
+        );
         Pedido pedido = pedidoFactory.crearPedidoWeb(
             request,
             cliente,
@@ -355,6 +370,11 @@ public class PedidoService {
             cotizacion.igv(),
             cotizacion.total()
         );
+        pedido.setDescuentoCupon(cotizacion.descuentoCupon());
+        pedido.setCodigoCupon(cotizacion.codigoCupon());
+        if (cotizacion.codigoCupon() != null) {
+            pedido.setCupon(cuponService.buscarParaPedido(cotizacion.codigoCupon()));
+        }
         return new PedidoWebPreparado(pedido, detalles);
     }
 
@@ -381,14 +401,31 @@ public class PedidoService {
         return productos;
     }
 
-    private CheckoutCotizacionResponse calcularCotizacion(String tipoEntrega, BigDecimal subtotal) {
+    private CheckoutCotizacionResponse calcularCotizacion(
+        String tipoEntrega,
+        BigDecimal subtotal,
+        String codigoCupon,
+        boolean bloquearCupon,
+        UUID clienteId
+    ) {
+        BigDecimal descuentoCupon = cuponService.calcularDescuento(
+            codigoCupon,
+            subtotal,
+            bloquearCupon,
+            clienteId
+        );
+        BigDecimal subtotalConDescuento = subtotal.subtract(descuentoCupon);
         BigDecimal costoEnvio = "DELIVERY".equals(tipoEntrega)
             ? ejecutar(() -> ventaOperacionRepository.parametroNumerico("COSTO_DELIVERY"))
             : BigDecimal.ZERO;
         BigDecimal porcentajeIgv = ejecutar(() -> ventaOperacionRepository.parametroNumerico("IGV_PORCENTAJE"));
-        BigDecimal igv = subtotal.multiply(porcentajeIgv).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        BigDecimal total = subtotal.add(igv).add(costoEnvio).setScale(2, RoundingMode.HALF_UP);
-        return new CheckoutCotizacionResponse(subtotal, igv, costoEnvio, total);
+        BigDecimal igv = subtotalConDescuento.multiply(porcentajeIgv)
+            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal total = subtotalConDescuento.add(igv).add(costoEnvio).setScale(2, RoundingMode.HALF_UP);
+        String codigoNormalizado = codigoCupon == null || codigoCupon.isBlank()
+            ? null
+            : codigoCupon.trim().toUpperCase(java.util.Locale.ROOT);
+        return new CheckoutCotizacionResponse(subtotal, descuentoCupon, codigoNormalizado, igv, costoEnvio, total);
     }
 
     private Map<UUID, String> imagenesPrincipales(List<UUID> productoIds) {
@@ -423,7 +460,8 @@ public class PedidoService {
             request.envioIdUbigeo(),
             request.metodoPago(),
             request.medioPagoSimulado(),
-            detalles
+            detalles,
+            request.codigoCupon()
         );
     }
 

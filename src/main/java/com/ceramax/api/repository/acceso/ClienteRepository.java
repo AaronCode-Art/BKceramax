@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
     Optional<Cliente> findByEmail(String email);
+    Optional<Cliente> findByEmailIgnoreCase(String email);
     Optional<Cliente> findByCodigo(String codigo);
     Optional<Cliente> findByTipoDocumentoAndNumeroDocumento(String tipoDocumento, String numeroDocumento);
     boolean existsByEmailIgnoreCase(String email);

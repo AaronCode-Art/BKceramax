@@ -27,7 +27,7 @@ public record ClienteRequest(
     @Size(max = 120, message = "El email no puede superar 120 caracteres")
     String email,
     @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 8, max = 100, message = "La contraseña debe tener entre 8 y 100 caracteres")
+    @Size(min = 6, max = 100, message = "La contraseña debe tener entre 6 y 100 caracteres")
     String password,
     @NotBlank(message = "El teléfono es obligatorio")
     @Pattern(regexp = "9[0-9]{8}", message = "El teléfono debe empezar con 9 y tener exactamente 9 dígitos")
@@ -55,6 +55,11 @@ public record ClienteRequest(
     @Pattern(regexp = "[0-9]{6}", message = "El UBIGEO debe contener exactamente 6 dígitos")
     String idUbigeo
 ) {
+    @AssertTrue(message = "La contraseña necesita 6 dígitos, una mayúscula y un símbolo, sin secuencias numéricas consecutivas")
+    public boolean isContrasenaValida() {
+        return ContrasenaClienteValidator.esValida(password);
+    }
+
     @AssertTrue(message = "El número de documento no corresponde al tipo seleccionado")
     public boolean isDocumentoValido() {
         if (tipoDocumento == null || numeroDocumento == null) {

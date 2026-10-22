@@ -14,6 +14,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PedidoRepository extends JpaRepository<Pedido, UUID> {
+    long countByCupon_Id(UUID cuponId);
+
+    long countByCupon_IdAndCliente_Id(UUID cuponId, UUID clienteId);
+
     @EntityGraph(attributePaths = "estado")
     List<Pedido> findByCliente_IdOrderByCreatedAtDesc(UUID clienteId);
 

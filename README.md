@@ -61,6 +61,21 @@ export DB_PASSWORD="tu_password_neon"
 mvnw.cmd clean package -DskipTests
 java -jar target/ceramax-0.0.1-SNAPSHOT.jar
 
+## Recuperacion de contrasena de clientes
+
+La tienda permite solicitar un codigo de un solo uso identificandose con el correo registrado o el DNI. El codigo se envia al correo asociado a la cuenta, vence en 10 minutos y admite hasta cinco intentos.
+
+Antes de usar esta funcion, aplica una sola vez el script `scripts/recuperacion-contrasena-clientes.sql` en la base de datos. El backend usa la configuracion SMTP existente (`MAIL_HOST`, `MAIL_PORT`, `MAIL_USER` y `MAIL_PASSWORD`) y envia los mensajes con el nombre Cerámax.
+
+- `POST /api/auth/cliente/recuperacion` — JSON: `{"identificador":"correo@ejemplo.com"}` o `{"identificador":"12345678"}`.
+- `POST /api/auth/cliente/restablecer-contrasena` — JSON: `{"identificador":"correo@ejemplo.com","codigo":"123456","nuevaContrasena":"..."}`.
+
+## Cupones de tienda
+
+El backend usa el esquema de cupones incluido en `scripts/bd/cer.sql`: la tabla `cupon` y `pedido.id_cupon`, `pedido.cupon_codigo` y `pedido.descuento_cupon`. Si la base ya fue creada con ese dump, no ejecutes una migración adicional. Para bases anteriores sin esas columnas, `scripts/cupones.sql` crea la tabla con el mismo esquema y agrega las columnas faltantes a `pedido`; no modifica la configuración de `application.properties`.
+
+Gerencia (`ADMIN`) y Jefatura de logística (`JEFE_LOGISTICA`) pueden administrar los cupones en `GET/POST /api/v1/cupones`, `PUT/DELETE /api/v1/cupones/{id}`. La tienda consulta los anuncios vigentes en `GET /api/v1/public/cupones/anuncios`; el título se genera desde el código y el mensaje usa `cupon.descripcion`, ya que el dump no tiene columnas separadas para anuncio ni para decidir su publicación. La cotización acepta `codigoCupon`; los usos globales y por cliente se cuentan a partir de los pedidos relacionados con `id_cupon`.
+
 Al arrancar veras:
 Tomcat started on port 8090
 Started CeramaxApplication in X seconds
@@ -208,4 +223,3 @@ JSON: http://localhost:8090/v3/api-docs
 
 3. Reporte resumen (admin)
    curl "http://localhost:8090/api/reportes/resumen?desde=2026-09-01&hasta=2026-09-03" -H "Authorization: Bearer <TOKEN>"
-

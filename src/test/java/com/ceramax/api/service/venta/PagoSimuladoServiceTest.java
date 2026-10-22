@@ -48,6 +48,7 @@ class PagoSimuladoServiceTest {
             null,
             BigDecimal.TEN,
             BigDecimal.ZERO,
+            null,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
             BigDecimal.TEN,
@@ -80,7 +81,8 @@ class PagoSimuladoServiceTest {
             null,
             "SIMULADO",
             "YAPE",
-            List.of()
+            List.of(),
+            null
         );
     }
 }

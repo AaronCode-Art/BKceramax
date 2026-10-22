@@ -55,6 +55,10 @@ public class Pedido {
     @JoinColumn(name = "id_sucursal")
     private Sucursal sucursal;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_cupon")
+    private Cupon cupon;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "id_estado", nullable = false)
     private EstadoEnvio estado;
@@ -124,6 +128,9 @@ public class Pedido {
 
     @Column(name = "descuento_cupon", nullable = false, precision = 10, scale = 2)
     private BigDecimal descuentoCupon = BigDecimal.ZERO;
+
+    @Column(name = "cupon_codigo", length = 20)
+    private String codigoCupon;
 
     @Column(name = "igv", nullable = false, precision = 10, scale = 2)
     private BigDecimal igv;

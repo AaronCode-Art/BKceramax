@@ -23,6 +23,7 @@ public record PedidoResponse(
     String razonSocial,
     BigDecimal subtotal,
     BigDecimal descuentoCupon,
+    String codigoCupon,
     BigDecimal costoEnvio,
     BigDecimal igv,
     BigDecimal total,
