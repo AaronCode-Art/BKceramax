@@ -8,6 +8,7 @@ public record CuponAnuncioResponse(
     String tipoDescuento,
     BigDecimal valor,
     BigDecimal compraMinima,
+    Integer limitePorCliente,
     OffsetDateTime venceEn,
     String titulo,
     String mensaje
