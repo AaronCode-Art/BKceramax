@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 public class CatalogoPublicoMapper {
 
     public CatalogoPublicoResponse toResponse(CatalogoPublicoProjection projection) {
+        return toResponse(projection, null);
+    }
+
+    public CatalogoPublicoResponse toResponse(CatalogoPublicoProjection projection, String imagenUrl) {
         return new CatalogoPublicoResponse(
             projection.getIdProducto(),
             projection.getProductoCodigo(),
@@ -20,7 +24,8 @@ public class CatalogoPublicoMapper {
             projection.getPrecio(),
             projection.getPrecioFinal(),
             projection.getDescuentoPorcentaje(),
-            projection.getStockDisponible()
+            projection.getStockDisponible(),
+            imagenUrl
         );
     }
 

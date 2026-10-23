@@ -45,6 +45,7 @@ public class CuponService {
                 cupon.getTipoDescuento(),
                 cupon.getValor(),
                 cupon.getMontoMinimo(),
+                cupon.getLimitePorCliente(),
                 cupon.getFechaFin(),
                 tituloAnuncio(cupon),
                 cupon.getDescripcion()
