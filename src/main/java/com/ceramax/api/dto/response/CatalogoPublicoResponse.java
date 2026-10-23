@@ -12,5 +12,6 @@ public record CatalogoPublicoResponse(
     BigDecimal precio,
     BigDecimal precioFinal,
     BigDecimal descuentoPorcentaje,
-    Integer stockDisponible
+    Integer stockDisponible,
+    String imagenUrl
 ) {}
